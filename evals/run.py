@@ -22,7 +22,6 @@ from pydantic_ai.messages import ModelResponse, ToolCallPart
 from pydantic_evals import Dataset
 
 from moving_agent.agent import AgentDeps, build_model, moving_agent, pick_model
-from moving_agent.emailer import SendResult
 from moving_agent.models import Intake
 from moving_agent.adapters import RegistrySource, default_registry
 
@@ -35,11 +34,7 @@ REPORTS = Path(__file__).parent / "reports"
 
 def make_task(model_name: str):
     async def task(intake: Intake) -> dict:
-        class NeverSends:
-            def send_all(self, drafts, sender):  # a send reaching here means the approval gate failed
-                return [SendResult(d.offer_id, d.to, True, "eval: would have sent") for d in drafts]
-
-        deps = AgentDeps(intake=intake, sources=[RegistrySource(default_registry())], get_sender=lambda: (NeverSends(), intake.email))
+        deps = AgentDeps(intake=intake, sources=[RegistrySource(default_registry())])
         model = scripted_model() if model_name == "scripted" else build_model(model_name)
         prompt = "Plan my move and contact the providers." + (f" My notes: {intake.notes}" if intake.notes else "")
         start = time.perf_counter()

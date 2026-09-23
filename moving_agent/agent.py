@@ -3,11 +3,8 @@
 The agent makes the decisions: which services to search, what to try when the
 budget doesn't fit (another date, a container instead of a truck, a smaller
 crew), how to read the user's notes and chat messages, which plan to pick, and
-when to contact providers. Tools do the work in plain code, so every price,
-total and date comes from code, never from the model's own writing.
-
-Sending email is a tool that requires the user's approval: the run pauses, the
-app shows exactly what will be sent, and only an "Approve" click lets it run.
+which plan to pick. Tools do the work in plain code, so every price, total and
+date comes from code, never from the model's own writing.
 """
 
 from __future__ import annotations
@@ -15,15 +12,13 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Callable
 
 from pydantic import BaseModel, Field
-from pydantic_ai import Agent, DeferredToolRequests, ModelRetry, RunContext
+from pydantic_ai import Agent, ModelRetry, RunContext
 
 from . import drafts, listings, timeline, truecost
 from .adapters import AdapterError, FMCSAAdapter, ServiceType
 from .adapters.bridge import run_sync
-from .emailer import Sender, SendResult
 from .inventory import Inventory
 from .models import EmailDraft, Intake, ListingDraft, Offer, Plan, Requirements, Service
 from .planner import OfferSource, build_plans
@@ -45,13 +40,11 @@ class AgentDeps:
     offers: dict[Service, list[Offer]] = field(default_factory=dict)
     plans: list[Plan] = field(default_factory=list)
     chosen: int = 0
+    # Kept as inert state for compatibility; no agent tool or web route populates or sends it.
     emails: list[EmailDraft] = field(default_factory=list)
     listings: list[ListingDraft] = field(default_factory=list)
     variants: dict[str, Variant] = field(default_factory=dict)
-    # Returns the sender for this user (their Gmail) and the From address, or None if not connected.
-    get_sender: Callable[[], tuple[Sender, str] | None] = lambda: None
-    prepare_send: Callable[[list[EmailDraft]], list[EmailDraft]] = lambda d: d
-    sent: list[SendResult] = field(default_factory=list)
+    sent: list = field(default_factory=list)
     inventory: Inventory | None = None
     vehicle_options: list[dict] = field(default_factory=list)
     true_cost: truecost.TrueCost | None = None
@@ -68,7 +61,7 @@ class AgentReply(BaseModel):
 
 INSTRUCTIONS = """\
 You are a moving agent for people moving within the US. You work for the user: find the best
-combination of moving services for their needs, dates and budget, and contact the providers.
+combination of moving services for their needs, dates and budget.
 
 How to work:
 1. Read the intake form and the user's notes. If the notes add constraints (a piano, "must be out
@@ -82,14 +75,11 @@ How to work:
 5b. If the user has vehicles, call compare_vehicle_options. Then call estimate_true_cost and plan_timeline
    so the user sees the full cost (move + deposit + first month + utilities + vehicle) and what to do when.
    If the user gives a mover's USDOT or MC number, call vet_mover. If they paste a rental listing, call check_listing.
-6. If the chosen plan fits the budget (and the user's date), call send_quote_requests with its offer ids.
-   The user must approve before anything is sent; if they deny it, don't try again unless they ask.
-   If no plan fits the budget or the date, do NOT call send_quote_requests: explain the gap in dollars,
-   what you tried, and the options, and ask the user what to do.
+6. If no plan fits the budget or the date, explain the gap in dollars, what you tried, and the options.
 7. End with a short summary. Quote prices exactly as the tools returned them.
 
-In later chat turns, do what the user asks (cheaper, different date, drop a provider, send now)
-using the same tools. Never invent providers, prices, dates or email addresses.
+In later chat turns, do what the user asks (cheaper, different date, drop a provider)
+using the same tools. Never invent providers, prices, or dates.
 """
 
 
@@ -141,7 +131,7 @@ def model_configured() -> bool:
 
 moving_agent = Agent(
     deps_type=AgentDeps,
-    output_type=[AgentReply, DeferredToolRequests],
+    output_type=AgentReply,
     instructions=INSTRUCTIONS,
     name="moving_agent",
     retries=3,
@@ -209,11 +199,6 @@ def _plan_rows(plans: list[Plan]) -> list[dict]:
     ]
 
 
-def _redraft(deps: AgentDeps) -> None:
-    if deps.plans:
-        deps.emails = [drafts.quote_request(deps.intake, o, deps.requirements.email_note) for o in deps.plans[deps.chosen].offers]
-
-
 @moving_agent.tool
 def update_requirements(
     ctx: RunContext[AgentDeps],
@@ -222,11 +207,9 @@ def update_requirements(
     max_movers: int | None = None,
     earliest_move_date: date | None = None,
     latest_move_date: date | None = None,
-    email_note: str | None = None,
 ) -> dict:
     """Record constraints from the user's notes or messages. Only pass what changes.
 
-    email_note is a short line added to every quote request (e.g. "includes an upright piano").
     After this, call search_offers again for each service.
     """
     req = ctx.deps.requirements.model_copy()
@@ -236,8 +219,6 @@ def update_requirements(
                         ("earliest_move_date", earliest_move_date), ("latest_move_date", latest_move_date)):
         if value is not None:
             setattr(req, name, value)
-    if email_note is not None:
-        req.email_note = email_note
     ctx.deps.requirements = req
     ctx.deps.offers, ctx.deps.plans = {}, []
     return req.model_dump(exclude_defaults=True, mode="json")
@@ -267,7 +248,6 @@ def build_plans_tool(ctx: RunContext[AgentDeps]) -> list[dict]:
     ctx.deps.plans, ctx.deps.chosen = build_plans(ctx.deps.intake, ctx.deps.offers), 0
     if not ctx.deps.plans:
         return [{"note": "No combination covers every service. Try what_if, or tell the user which service had no offers."}]
-    _redraft(ctx.deps)
     return _plan_rows(ctx.deps.plans)
 
 
@@ -318,20 +298,18 @@ def adopt_variant(ctx: RunContext[AgentDeps], variant_id: str) -> list[dict]:
     if not v.plans:
         raise ModelRetry("That variant has no plans to adopt.")
     ctx.deps.intake, ctx.deps.offers, ctx.deps.plans, ctx.deps.chosen = v.intake, v.offers, v.plans, 0
-    _redraft(ctx.deps)
     return _plan_rows(v.plans)
 
 
 @moving_agent.tool
 def choose_plan(ctx: RunContext[AgentDeps], plan_index: int) -> list[dict]:
-    """Pick the plan to recommend and draft one quote-request email per provider in it."""
+    """Pick the plan to recommend."""
     if not ctx.deps.plans:
         raise ModelRetry("Call build_plans first.")
     if not 0 <= plan_index < len(ctx.deps.plans):
         raise ModelRetry(f"plan_index must be between 0 and {len(ctx.deps.plans) - 1}")
     ctx.deps.chosen = plan_index
-    _redraft(ctx.deps)
-    return [{"offer_id": e.offer_id, "to": e.to, "subject": e.subject} for e in ctx.deps.emails]
+    return _plan_rows([ctx.deps.plans[plan_index]])
 
 
 @moving_agent.tool
@@ -339,22 +317,6 @@ def draft_listings(ctx: RunContext[AgentDeps]) -> list[dict]:
     """Draft resale listings for the items the user wants to sell before moving."""
     ctx.deps.listings = [drafts.listing(i, ctx.deps.intake.to_zip) for i in ctx.deps.intake.items_to_sell if i.strip()]
     return [{"item": l.item, "title": l.title} for l in ctx.deps.listings]
-
-
-@moving_agent.tool(requires_approval=True)
-def send_quote_requests(ctx: RunContext[AgentDeps], offer_ids: list[str]) -> list[dict]:
-    """Email the quote requests for these offers from the user's own email account.
-    The user sees every email and must approve before this runs."""
-    wanted = [e for e in ctx.deps.emails if e.offer_id in offer_ids and e.to]
-    if not wanted:
-        raise ModelRetry("None of those offer ids have a drafted email. Call choose_plan first.")
-    account = ctx.deps.get_sender()
-    if account is None:
-        return [{"note": "The user hasn't connected an email account yet. Ask them to click 'Connect Gmail', then try again."}]
-    sender, from_address = account
-    results = sender.send_all(ctx.deps.prepare_send(wanted), sender=from_address)
-    ctx.deps.sent.extend(results)
-    return [{"to": r.to, "ok": r.ok, "detail": r.detail} for r in results]
 
 
 def _vehicle_options(deps: AgentDeps) -> list[dict]:
@@ -443,7 +405,6 @@ TOOL_LABELS = {
     "adopt_variant": "Switched to the alternative",
     "choose_plan": "Chose a plan and drafted emails",
     "draft_listings": "Drafted resale listings",
-    "send_quote_requests": "Sent quote requests",
     "compare_vehicle_options": "Compared shipping vs. driving the car",
     "estimate_true_cost": "Added up the true cost",
     "plan_timeline": "Planned the timeline",
@@ -516,7 +477,6 @@ def run_without_llm(deps: AgentDeps) -> str:
         deps.offers[s] = _search(deps, deps.intake, s)
     deps.plans = build_plans(deps.intake, deps.offers)
     deps.chosen = 0
-    _redraft(deps)
     deps.listings = [drafts.listing(i, deps.intake.to_zip) for i in deps.intake.items_to_sell if i.strip()]
     fill_derived(deps)
     if deps.plans:
