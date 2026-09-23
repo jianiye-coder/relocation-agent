@@ -98,6 +98,18 @@
       <label for="inventory_text">What you're moving <span class="hint">· rooms or items, one per line (optional, better than home size)</span></label>
       <textarea id="inventory_text" name="inventory_text" rows="4" placeholder="2 bedrooms&#10;living room&#10;kitchen&#10;upright piano&#10;boxes x 20"></textarea>
     </div>
+    <div class="field">
+      <label for="inventory_photos">Room photos · optional</label>
+      <input id="inventory_photos" type="file" accept="image/jpeg,image/png,image/webp" multiple>
+      <p class="muted">Select 1–10 photos, up to 8 MB and 20 megapixels each. Photos are sent to your selected model for analysis and are not retained by this app.</p>
+      <button id="scan_photos" class="btn btn-secondary" type="button">Scan photos</button>
+      <p id="photo_status" class="muted" role="status" aria-live="polite"></p>
+      <div id="photo_review" hidden>
+        <label for="photo_items">Detected items · edit this estimate</label>
+        <textarea id="photo_items" rows="5"></textarea>
+        <button id="use_photo_items" class="btn btn-secondary" type="button">Use this item list</button>
+      </div>
+    </div>
   </section>
 
   <section class="block">
@@ -172,6 +184,44 @@
   }
 
   document.querySelectorAll("[data-geo]").forEach((el) => el.addEventListener("change", () => lookup(el.dataset.geo)));
+})();
+</script>
+<script>
+(() => {
+  const input = document.getElementById("inventory_photos");
+  const button = document.getElementById("scan_photos");
+  const status = document.getElementById("photo_status");
+  const review = document.getElementById("photo_review");
+  const items = document.getElementById("photo_items");
+  button.addEventListener("click", async () => {
+    const files = Array.from(input.files);
+    if (!files.length || files.length > 10) { status.textContent = "Select 1–10 photos."; return; }
+    if (files.some(f => f.size > 8 * 1024 * 1024)) { status.textContent = "Each photo must be 8 MB or smaller."; return; }
+    const data = new FormData();
+    files.forEach(file => data.append("photos", file));
+    button.disabled = true;
+    review.hidden = true;
+    status.textContent = "Scanning photos… You can keep filling out the form.";
+    try {
+      const response = await fetch("/api/inventory/photos", {method: "POST", body: data});
+      const result = await response.json();
+      if (!response.ok) throw new Error(typeof result.detail === "string" ? result.detail : "Photo analysis is unavailable.");
+      items.value = result.editable_text;
+      review.hidden = !items.value;
+      status.textContent = items.value ? result.disclaimer : "No items detected. Try clearer photos or enter items manually.";
+    } catch (error) {
+      status.textContent = error.message + " You can still enter your inventory manually.";
+    } finally {
+      button.disabled = false;
+      input.value = "";
+    }
+  });
+  document.getElementById("use_photo_items").addEventListener("click", () => {
+    const target = document.getElementById("inventory_text");
+    target.value = items.value;
+    target.focus();
+    status.textContent = "Item list applied. Edit it before selecting Find my options.";
+  });
 })();
 </script>
 {% endblock %}
