@@ -2,11 +2,9 @@
 
 Open-source AI agent for people relocating cities. MVP scope: housing, storage and moving, for one city pair (Los Angeles -> San Francisco).
 
-Repository: [jianiye-coder/relocation-agent](https://github.com/jianiye-coder/relocation-agent)
-
 The user fills in one intake profile. The agent (Pydantic AI) compares every way to move in one quote format, vets movers with FMCSA, checks rental listings for scam signs, adds up the true cost (move + deposit + first month + utilities + storage + vehicle), plans a timeline backward from the move date, and emails providers from the user's own account after the user approves. Every price carries its source, a timestamp and a confidence. No booking or payment.
 
-Status: early MVP by Jenny and Sumit. Prices come from a sample catalog of illustrative rates until live adapters are connected.
+Status: early MVP. Prices come from a sample catalog of illustrative rates until live adapters are connected.
 
 PRD: [docs/PRD.md](docs/PRD.md)
 
