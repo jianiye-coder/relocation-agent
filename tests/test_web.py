@@ -23,3 +23,20 @@ def test_email_delivery_routes_are_not_registered():
     client = TestClient(web.app)
     for path in ["/send/nope", "/approve/nope", "/auth/google/start", "/auth/google/callback"]:
         assert client.post(path).status_code == 404
+
+
+def test_candidate_home_intake_survives_the_plan_session(intake, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    response = TestClient(web.app).post("/plan", data=form(
+        intake,
+        candidate_addresses="1 Main St, San Francisco, CA\n2 Oak St, San Francisco, CA",
+        commute_destination="1 Market St, San Francisco, CA",
+        commute_mode="transit",
+        commute_departure_time="08:30",
+    ))
+    import re
+    rid = re.search(r"/plan/(\w+)", str(response.url)).group(1)
+    saved = web.SESSIONS[rid].intake
+    assert saved.candidate_addresses == ["1 Main St, San Francisco, CA", "2 Oak St, San Francisco, CA"]
+    assert saved.commute_destination == "1 Market St, San Francisco, CA"
+    assert saved.commute_mode == "transit" and saved.commute_departure_time == "08:30"

@@ -169,6 +169,10 @@ async def plan(
     vehicles: list[str] = Form(default=[]),
     lease_end: str = Form(""),
     monthly_rent: str = Form(""),
+    candidate_addresses: str = Form(""),
+    commute_destination: str = Form(""),
+    commute_mode: str = Form("drive"),
+    commute_departure_time: str = Form(""),
 ):
     from_zip, to_zip, distance_miles, geo_errors = _fill_from_addresses(
         from_address, to_address, from_zip.strip(), to_zip.strip(), distance_miles.strip()
@@ -186,6 +190,9 @@ async def plan(
             inventory_text=inventory_text, household_size=household_size,
             pets=[p.strip() for p in pets.split(",") if p.strip()], vehicles=vehicles,
             lease_end=lease_end or None, monthly_rent=int(monthly_rent) if monthly_rent.strip() else None,
+            candidate_addresses=[a.strip() for a in candidate_addresses.splitlines() if a.strip()],
+            commute_destination=commute_destination.strip(), commute_mode=commute_mode.lower(),
+            commute_departure_time=commute_departure_time.strip(),
         )
     except (ValidationError, ValueError) as exc:
         errs = exc.errors() if isinstance(exc, ValidationError) else [{"loc": ("form",), "msg": str(exc)}]
