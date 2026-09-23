@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 from pydantic_ai.usage import UsageLimits
 
-from .. import geo
+from .. import geo, home
 from ..agent import AgentDeps, build_model, fill_derived, model_configured, moving_agent, pick_model, run_without_llm, trace
 from ..models import HomeSize, Intake
 from ..adapters import QuoteCache, RegistrySource, default_registry
@@ -206,7 +206,8 @@ async def plan(
             intake = intake.model_copy(update={"volume_cuft": max(20, min(3000, inventory.total_cuft)), "weight_lbs": inventory.total_lbs})
 
     sid = request.state.sid
-    deps = AgentDeps(intake=intake, sources=SOURCES, inventory=inventory)
+    home_results = [{"address": address, "commute": home.commute(address, intake.commute_destination, intake.commute_mode), "utilities": home.utilities(address)} for address in intake.candidate_addresses]
+    deps = AgentDeps(intake=intake, sources=SOURCES, inventory=inventory, home_results=home_results)
     s = Session(sid=sid, intake=intake, deps=deps, used_llm=model_configured())
     rid = uuid.uuid4().hex[:12]
     SESSIONS[rid] = s
@@ -240,6 +241,7 @@ def show_plan(request: Request, rid: str):
         "steps": trace(s.history),
         "model": pick_model(), "inventory": d.inventory, "vehicle_options": d.vehicle_options,
         "true_cost": d.true_cost, "timeline": d.timeline, "listing_checks": d.listing_checks,
+        "home_results": d.home_results,
         "adapter_errors": [e for src in d.sources if hasattr(src, "errors") for e in src.errors(d.intake)],
     })
 
