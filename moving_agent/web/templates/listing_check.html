@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Check a listing{% endblock %}
+{% block content %}
+<h1>Check a rental listing</h1>
+<p class="lead">Paste a listing before you pay anything. We look for scam signs: wire or app deposits before a viewing, no showings, below-market rent, copied text, no address.</p>
+<form method="post" action="/listing-check">
+  <div class="field"><label for="text">Listing text</label><textarea id="text" name="text" rows="8" required>{{ form.text or "" }}</textarea></div>
+  <div class="row">
+    <div class="field"><label for="price_usd">Rent ($/month)</label><input id="price_usd" name="price_usd" type="number" min="0" value="{{ form.price_usd or '' }}"></div>
+    <div class="field"><label for="bedrooms">Bedrooms <span class="hint">· 0 for studio</span></label><input id="bedrooms" name="bedrooms" type="number" min="0" max="6" value="{{ form.bedrooms or '' }}"></div>
+  </div>
+  <div class="field"><label for="address">Address <span class="hint">· if the listing gives one</span></label><input id="address" name="address" value="{{ form.address or '' }}"></div>
+  <div class="actions"><button class="btn btn-primary" type="submit">Check listing</button></div>
+</form>
+{% if result %}
+<div class="card raised" style="margin-top:24px">
+  <h2 class="risk-{{ result.risk }}">{{ result.risk|capitalize }} risk</h2>
+  {% if result.flags %}<ul>{% for f in result.flags %}<li>{{ f.message }}</li>{% endfor %}</ul>
+  {% else %}<p>No warning signs found. Still: see it in person (or by live video) and sign a lease before paying.</p>{% endif %}
+  {% if result.market_rent_usd %}<p class="muted">Compared with ${{ "{:,}".format(result.market_rent_usd) }}/month, {{ result.basis }}.</p>{% endif %}
+</div>
+{% endif %}
+{% endblock %}

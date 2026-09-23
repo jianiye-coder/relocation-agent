@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Quote requests sent{% endblock %}
+{% block content %}
+<h1>Quote requests</h1>
+<p class="lead">{% if mode == "outbox" %}Outbox mode: emails were saved as files, not delivered. Set EMAIL_MODE=gmail or smtp to send for real.{% else %}Replies from providers will come to your inbox.{% endif %}</p>
+<div class="card">
+<table>
+  <tr><th>To</th><th>Status</th><th>Detail</th></tr>
+  {% for r in results %}
+  <tr><td>{{ r.to }}</td><td>{% if r.ok %}<span class="ok">{{ "Saved (not delivered)" if mode == "outbox" else "Sent" }}</span>{% else %}<span class="bad">Failed</span>{% endif %}</td><td class="muted">{{ r.detail }}</td></tr>
+  {% endfor %}
+</table>
+</div>
+<div class="actions"><a class="btn btn-secondary" href="/plan/{{ rid }}">Back to the plan</a><a class="btn btn-secondary" href="/">Plan another move</a></div>
+{% endblock %}

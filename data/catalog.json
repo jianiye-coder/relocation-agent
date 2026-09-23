@@ -1,0 +1,27 @@
+{
+  "_note": "Sample catalog for the demo. Rates are illustrative estimates, not live prices. Contact emails use the reserved .example domain so nothing reaches a real business. Replace with live adapters (see PRD: APIs we need).",
+  "trucks": [
+    {"provider": "U-Haul", "title": "10 ft truck", "capacity_cuft": 380, "local_base": 19.95, "local_per_mile": 1.29, "one_way_per_mile": 1.10, "one_way_min": 250, "rating": 4.0, "contact_email": "reservations@uhaul.example", "contact_url": "https://www.uhaul.com/Trucks/", "blackout": []},
+    {"provider": "U-Haul", "title": "15 ft truck", "capacity_cuft": 764, "local_base": 29.95, "local_per_mile": 1.29, "one_way_per_mile": 1.35, "one_way_min": 350, "rating": 4.0, "contact_email": "reservations@uhaul.example", "contact_url": "https://www.uhaul.com/Trucks/", "blackout": []},
+    {"provider": "U-Haul", "title": "20 ft truck", "capacity_cuft": 1016, "local_base": 39.95, "local_per_mile": 1.29, "one_way_per_mile": 1.55, "one_way_min": 450, "rating": 4.0, "contact_email": "reservations@uhaul.example", "contact_url": "https://www.uhaul.com/Trucks/", "blackout": []},
+    {"provider": "Budget Truck", "title": "12 ft truck", "capacity_cuft": 450, "local_base": 29.99, "local_per_mile": 0.99, "one_way_per_mile": 1.05, "one_way_min": 300, "rating": 3.8, "contact_email": "rentals@budgettruck.example", "contact_url": "https://www.budgettruck.com/", "blackout": []},
+    {"provider": "Penske", "title": "16 ft truck", "capacity_cuft": 800, "local_base": 39.99, "local_per_mile": 0.99, "one_way_per_mile": 1.25, "one_way_min": 400, "rating": 4.2, "contact_email": "reservations@penske.example", "contact_url": "https://www.pensketruckrental.com/", "blackout": []}
+  ],
+  "labor": [
+    {"provider": "TaskRabbit", "title": "2 movers (Marcus + partner)", "movers": 2, "hourly_per_mover": 55, "min_hours": 2, "rating": 4.9, "contact_email": "marcus.moves@taskrabbit.example", "contact_url": "https://www.taskrabbit.com/services/moving", "available_weekdays": [0,1,2,3,4,5,6]},
+    {"provider": "TaskRabbit", "title": "2 movers (Ana + partner)", "movers": 2, "hourly_per_mover": 42, "min_hours": 2, "rating": 4.7, "contact_email": "ana.helps@taskrabbit.example", "contact_url": "https://www.taskrabbit.com/services/moving", "available_weekdays": [5,6]},
+    {"provider": "HireAHelper", "title": "2-person crew", "movers": 2, "hourly_per_mover": 48, "min_hours": 2, "rating": 4.6, "contact_email": "crews@hireahelper.example", "contact_url": "https://www.hireahelper.com/", "available_weekdays": [0,1,2,3,4]},
+    {"provider": "TaskRabbit", "title": "3 movers (Dev + crew)", "movers": 3, "hourly_per_mover": 50, "min_hours": 2, "rating": 4.8, "contact_email": "dev.crew@taskrabbit.example", "contact_url": "https://www.taskrabbit.com/services/moving", "available_weekdays": [0,1,2,3,4,5,6]}
+  ],
+  "storage": [
+    {"provider": "Extra Space Storage", "title": "5x5 unit", "capacity_cuft": 200, "monthly": 45, "first_month_discount": 0.5, "rating": 4.4, "contact_email": "store0421@extraspace.example", "contact_url": "https://www.extraspace.com/"},
+    {"provider": "Extra Space Storage", "title": "5x10 unit", "capacity_cuft": 400, "monthly": 79, "first_month_discount": 0.5, "rating": 4.4, "contact_email": "store0421@extraspace.example", "contact_url": "https://www.extraspace.com/"},
+    {"provider": "Public Storage", "title": "10x10 unit", "capacity_cuft": 800, "monthly": 129, "first_month_discount": 0.99, "rating": 4.2, "contact_email": "rentals@publicstorage.example", "contact_url": "https://www.publicstorage.com/"},
+    {"provider": "CubeSmart", "title": "10x15 unit", "capacity_cuft": 1200, "monthly": 175, "first_month_discount": 0.0, "rating": 4.3, "contact_email": "store@cubesmart.example", "contact_url": "https://www.cubesmart.com/"}
+  ],
+  "containers": [
+    {"provider": "PODS", "title": "8 ft container", "capacity_cuft": 400, "base": 350, "per_mile": 0.95, "rating": 4.3, "contact_email": "quotes@pods.example", "contact_url": "https://www.pods.com/"},
+    {"provider": "PODS", "title": "16 ft container", "capacity_cuft": 800, "base": 450, "per_mile": 1.35, "rating": 4.3, "contact_email": "quotes@pods.example", "contact_url": "https://www.pods.com/"},
+    {"provider": "U-Pack", "title": "ReloCube x2", "capacity_cuft": 580, "base": 300, "per_mile": 1.05, "rating": 4.5, "contact_email": "quotes@upack.example", "contact_url": "https://www.upack.com/"}
+  ]
+}

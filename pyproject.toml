@@ -1,0 +1,31 @@
+[project]
+name = "relocation-agent"
+version = "0.1.0"
+description = "Open-source AI agent for people relocating cities: housing, storage and moving, starting with LA -> SF."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic-ai-slim[anthropic,google,openai]>=1.0",
+    "pydantic-evals",
+    "fastapi",
+    "uvicorn",
+    "jinja2",
+    "python-multipart",
+    "email-validator",
+    "python-dotenv",
+    "httpx",
+    "cryptography",
+    "google-auth",
+    "google-auth-oauthlib",
+    "google-api-python-client",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "aiosmtpd"]
+
+[tool.setuptools.packages.find]
+include = ["moving_agent*", "evals*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning:starlette.*"]

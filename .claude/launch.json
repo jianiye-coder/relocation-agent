@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "moving-agent",
+      "runtimeExecutable": "/Users/yejiani/Desktop/Projects/moving-agent/.venv/bin/uvicorn",
+      "runtimeArgs": ["moving_agent.web.app:app", "--port", "8787", "--app-dir", "/Users/yejiani/Desktop/Projects/moving-agent"],
+      "port": 8787
+    }
+  ]
+}

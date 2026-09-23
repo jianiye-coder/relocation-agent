@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block title %}Plan your move{% endblock %}
+{% block content %}
+<h1>Plan your move</h1>
+<p class="lead">Tell us about your move. We'll find the truck, movers and storage that fit your dates and budget, and draft the emails to book them.</p>
+
+{% if errors %}
+<div class="errors" role="alert"><strong>Please fix:</strong><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>
+{% endif %}
+
+<form method="post" action="/plan" data-busy="The agent is planning your move (about 30 seconds)...">
+  <section class="block">
+    <h2>About you</h2>
+    <div class="row">
+      <div class="field"><label for="name">Name</label><input id="name" name="name" autocomplete="name" required></div>
+      <div class="field"><label for="email">Email <span class="hint">· quote requests are sent from here</span></label><input id="email" name="email" type="email" autocomplete="email" required></div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2>Where and when</h2>
+    <div class="field">
+      <label for="from_address">Moving from</label>
+      <input id="from_address" name="from_address" autocomplete="street-address" placeholder="Street, city, state" data-geo="from">
+      <p class="muted geo-note" id="from_note" aria-live="polite"></p>
+    </div>
+    <div class="field">
+      <label for="to_address">Moving to <span class="hint">· just the ZIP is fine if you don't have a home yet</span></label>
+      <input id="to_address" name="to_address" placeholder="Street, city, state, or a ZIP" data-geo="to">
+      <p class="muted geo-note" id="to_note" aria-live="polite"></p>
+    </div>
+    <div class="row">
+      <div class="field"><label for="from_zip">From ZIP <span class="hint">· filled in for you</span></label><input id="from_zip" name="from_zip" inputmode="numeric" pattern="\d{5}" required></div>
+      <div class="field"><label for="to_zip">To ZIP <span class="hint">· filled in for you</span></label><input id="to_zip" name="to_zip" inputmode="numeric" pattern="\d{5}" required></div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="distance_miles">Driving distance (miles) <span class="hint">· calculated for you</span></label>
+        <input id="distance_miles" name="distance_miles" type="number" min="0" max="3500" required>
+        <p class="muted geo-note" id="distance_note" aria-live="polite"></p>
+      </div>
+      <div class="field"><label for="move_date">Move date</label><input id="move_date" name="move_date" type="date" min="{{ today }}" required></div>
+    </div>
+    <div class="field">
+      <label for="flexible_days">How flexible is the date? <span class="hint">· days earlier or later</span></label>
+      <select id="flexible_days" name="flexible_days">
+        <option value="0">Not flexible</option><option value="1">1 day</option><option value="3">3 days</option><option value="7">1 week</option>
+      </select>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2>Your home</h2>
+    <div class="field">
+      <label for="home_size">Home size</label>
+      <select id="home_size" name="home_size">
+        {% for h in home_sizes %}<option value="{{ h }}">{{ h }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="row">
+      <div class="field"><label for="from_floor">Current floor</label><input id="from_floor" name="from_floor" type="number" min="0" value="1"></div>
+      <div class="field"><label for="to_floor">New floor</label><input id="to_floor" name="to_floor" type="number" min="0" value="1"></div>
+    </div>
+    <div class="pills">
+      <label class="pill"><input type="checkbox" name="from_elevator" value="true"><span>Elevator at current home</span></label>
+      <label class="pill"><input type="checkbox" name="to_elevator" value="true"><span>Elevator at new home</span></label>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2>Household</h2>
+    <div class="row">
+      <div class="field"><label for="household_size">People moving</label><input id="household_size" name="household_size" type="number" min="1" max="12" value="1"></div>
+      <div class="field"><label for="pets">Pets <span class="hint">· comma-separated, e.g. cat, dog</span></label><input id="pets" name="pets"></div>
+    </div>
+    <label>Vehicles</label>
+    <div class="pills" role="group" aria-label="Vehicles">
+      <label class="pill"><input type="checkbox" name="vehicles" value="car"><span>Car</span></label>
+      <label class="pill"><input type="checkbox" name="vehicles" value="suv"><span>SUV</span></label>
+      <label class="pill"><input type="checkbox" name="vehicles" value="truck"><span>Pickup truck</span></label>
+      <label class="pill"><input type="checkbox" name="vehicles" value="motorcycle"><span>Motorcycle</span></label>
+    </div>
+    <div class="row" style="margin-top:16px">
+      <div class="field"><label for="lease_end">Current lease ends <span class="hint">· optional</span></label><input id="lease_end" name="lease_end" type="date"></div>
+      <div class="field"><label for="monthly_rent">Expected rent at the new place ($/month)</label><input id="monthly_rent" name="monthly_rent" type="number" min="0"></div>
+    </div>
+    <div class="field">
+      <label for="inventory_text">What you're moving <span class="hint">· rooms or items, one per line (optional, better than home size)</span></label>
+      <textarea id="inventory_text" name="inventory_text" rows="4" placeholder="2 bedrooms&#10;living room&#10;kitchen&#10;upright piano&#10;boxes x 20"></textarea>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2>What you need</h2>
+    <div class="pills" role="group" aria-label="Services">
+      <label class="pill"><input type="checkbox" name="needs" value="truck" checked><span>Moving truck</span></label>
+      <label class="pill"><input type="checkbox" name="needs" value="labor" checked><span>Movers</span></label>
+      <label class="pill"><input type="checkbox" name="needs" value="storage"><span>Storage</span></label>
+      <label class="pill"><input type="checkbox" name="needs" value="container"><span>Container</span></label>
+    </div>
+    <p class="muted" style="margin:12px 0 0">We compare U-Haul, Budget and Penske trucks; TaskRabbit and HireAHelper movers; Extra Space, Public Storage and CubeSmart storage; PODS and U-Pack containers.</p>
+    <div class="row" style="margin-top:16px">
+      <div class="field"><label for="storage_months">Storage months <span class="hint">· if you need storage</span></label><input id="storage_months" name="storage_months" type="number" min="0" max="24" value="0"></div>
+      <div class="field"><label for="budget_usd">Total budget ($)</label><input id="budget_usd" name="budget_usd" type="number" min="1" required></div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2>Selling before you move <span class="hint" style="font-size:14px;font-weight:400">· optional</span></h2>
+    <div class="field">
+      <label for="items_to_sell">Items to sell, one per line</label>
+      <textarea id="items_to_sell" name="items_to_sell" rows="3" placeholder="IKEA sofa&#10;Bookshelf"></textarea>
+    </div>
+    <div class="field">
+      <label for="notes">Anything else?</label>
+      <textarea id="notes" name="notes" rows="2"></textarea>
+    </div>
+  </section>
+
+  <div class="actions"><button class="btn btn-primary" type="submit">Find my options</button></div>
+</form>
+
+<script>
+// Look up each address when the user leaves the field, fill in its ZIP,
+// then calculate the driving distance once both are known.
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const place = { from: null, to: null };
+
+  async function lookup(side) {
+    const input = $(side + "_address"), note = $(side + "_note");
+    const address = input.value.trim();
+    place[side] = null;
+    if (!address) { note.textContent = ""; return; }
+    note.textContent = "Looking up address...";
+    try {
+      const r = await fetch("/api/geo/place?address=" + encodeURIComponent(address));
+      const data = await r.json();
+      if (!r.ok) { note.textContent = data.error; return; }
+      place[side] = data;
+      $(side + "_zip").value = data.zip;
+      note.textContent = "Found: " + data.matched_address;
+    } catch (e) {
+      note.textContent = "Address lookup is unavailable. Enter the ZIP yourself.";
+    }
+    if (place.from && place.to) distance();
+  }
+
+  async function distance() {
+    const note = $("distance_note");
+    note.textContent = "Calculating driving distance...";
+    try {
+      const q = "from_address=" + encodeURIComponent($("from_address").value) + "&to_address=" + encodeURIComponent($("to_address").value);
+      const r = await fetch("/api/geo/distance?" + q);
+      const data = await r.json();
+      if (!r.ok) { note.textContent = data.error; return; }
+      $("distance_miles").value = data.distance_miles;
+      note.textContent = "Source: " + data.distance_source;
+    } catch (e) {
+      note.textContent = "Couldn't calculate the distance. Enter it yourself.";
+    }
+  }
+
+  document.querySelectorAll("[data-geo]").forEach((el) => el.addEventListener("change", () => lookup(el.dataset.geo)));
+})();
+</script>
+{% endblock %}

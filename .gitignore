@@ -1,0 +1,11 @@
+.env
+.pytest_cache/
+.venv/
+__pycache__/
+client_secret.json
+outbox/
+.token_key
+data/accounts.db
+data/cache.db
+evals/reports/*.json
+*.egg-info/
