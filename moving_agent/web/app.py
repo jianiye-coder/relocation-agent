@@ -1,4 +1,4 @@
-"""FastAPI app: intake form -> agent plans and asks to send -> user approves -> sent from their Gmail."""
+"""FastAPI app: intake form -> a sourced relocation plan -> optional agent chat."""
 
 from __future__ import annotations
 
@@ -14,13 +14,11 @@ from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
-from pydantic_ai import DeferredToolRequests, DeferredToolResults, ToolDenied
 from pydantic_ai.usage import UsageLimits
 
-from .. import accounts, geo
+from .. import geo
 from ..agent import AgentDeps, build_model, fill_derived, model_configured, moving_agent, pick_model, run_without_llm, trace
-from ..emailer import Sender, sender_from_env
-from ..models import EmailDraft, HomeSize, Intake
+from ..models import HomeSize, Intake
 from ..adapters import QuoteCache, RegistrySource, default_registry
 from ..inventory import estimate as estimate_inventory
 from ..listings import check as check_listing_rules
@@ -45,47 +43,11 @@ class Session:
     summary: str = ""
     history: list = field(default_factory=list)
     chat: list[dict] = field(default_factory=list)
-    pending: DeferredToolRequests | None = None
     error: str = ""
 
 
 # In-memory store is enough for a demo; swap for Postgres later.
 SESSIONS: dict[str, Session] = {}
-
-
-# ---- email helpers ----
-
-def get_sender() -> Sender:
-    """Server-wide sender (outbox / SMTP / single Gmail account) for development without Google OAuth."""
-    return sender_from_env()
-
-
-def redirect_for_testing(drafts: list[EmailDraft]) -> list[EmailDraft]:
-    """With EMAIL_REDIRECT_TO set, every email goes to that address instead (safe real-send testing)."""
-    target = os.getenv("EMAIL_REDIRECT_TO")
-    if not target:
-        return drafts
-    return [d.model_copy(update={"to": target, "subject": f"[test, would go to {d.to}] {d.subject}"}) for d in drafts]
-
-
-def account_for(sid: str, intake: Intake) -> tuple[Sender, str] | None:
-    """The user's own Gmail if connected. Without Google OAuth configured, fall back to the server sender (dev mode)."""
-    mine = accounts.sender_for(sid)
-    if mine:
-        return mine
-    if accounts.oauth_configured():
-        return None  # must connect their own Gmail
-    return get_sender(), intake.email
-
-
-def sending_mode(sid: str) -> dict:
-    email = accounts.connected_email(sid)
-    return {
-        "connected_email": email,
-        "oauth_configured": accounts.oauth_configured(),
-        "email_mode": os.getenv("EMAIL_MODE", "outbox"),
-        "redirect_to": os.getenv("EMAIL_REDIRECT_TO"),
-    }
 
 
 # ---- sessions ----
@@ -157,7 +119,7 @@ def _fill_from_addresses(from_address: str, to_address: str, from_zip: str, to_z
 
 # ---- running the agent ----
 
-async def run_turn(s: Session, prompt: str | None = None, results: DeferredToolResults | None = None) -> None:
+async def run_turn(s: Session, prompt: str) -> None:
     """One agent turn: a new message from the user, or the user's approve/deny decision."""
     s.error = ""
     try:
@@ -166,7 +128,6 @@ async def run_turn(s: Session, prompt: str | None = None, results: DeferredToolR
             deps=s.deps,
             model=build_model(pick_model()),
             message_history=s.history or None,
-            deferred_tool_results=results,
             usage_limits=UsageLimits(request_limit=30),
         )
     except Exception as exc:  # bad key, network, model error: keep the page usable
@@ -176,12 +137,8 @@ async def run_turn(s: Session, prompt: str | None = None, results: DeferredToolR
         return
     s.history = run.all_messages()
     fill_derived(s.deps)
-    if isinstance(run.output, DeferredToolRequests):
-        s.pending = run.output
-    else:
-        s.pending = None
-        s.summary = run.output.summary
-        s.chat.append({"role": "agent", "text": run.output.summary})
+    s.summary = run.output.summary
+    s.chat.append({"role": "agent", "text": run.output.summary})
 
 
 @app.post("/plan", response_class=HTMLResponse)
@@ -242,13 +199,12 @@ async def plan(
             intake = intake.model_copy(update={"volume_cuft": max(20, min(3000, inventory.total_cuft)), "weight_lbs": inventory.total_lbs})
 
     sid = request.state.sid
-    deps = AgentDeps(intake=intake, sources=SOURCES, get_sender=lambda: account_for(sid, deps.intake),
-                     prepare_send=redirect_for_testing, inventory=inventory)
+    deps = AgentDeps(intake=intake, sources=SOURCES, inventory=inventory)
     s = Session(sid=sid, intake=intake, deps=deps, used_llm=model_configured())
     rid = uuid.uuid4().hex[:12]
     SESSIONS[rid] = s
     if s.used_llm:
-        prompt = "Plan my move and contact the providers."
+        prompt = "Plan my move."
         if intake.notes:
             prompt += f" My notes: {intake.notes}"
         s.chat.append({"role": "user", "text": prompt})
@@ -265,18 +221,6 @@ def _session(rid: str, request: Request) -> Session:
     return s
 
 
-def _pending_emails(s: Session) -> list[dict]:
-    """The exact emails the agent is waiting to send, for the approval card."""
-    if not s.pending:
-        return []
-    out = []
-    for call in s.pending.approvals:
-        ids = call.args_as_dict().get("offer_ids", [])
-        drafts = redirect_for_testing([e for e in s.deps.emails if e.offer_id in ids and e.to])
-        out.append({"call_id": call.tool_call_id, "emails": drafts})
-    return out
-
-
 @app.get("/plan/{rid}", response_class=HTMLResponse)
 def show_plan(request: Request, rid: str):
     s = _session(rid, request)
@@ -285,12 +229,11 @@ def show_plan(request: Request, rid: str):
     if plans:
         plans = [plans[d.chosen]] + [p for i, p in enumerate(plans) if i != d.chosen]
     return templates.TemplateResponse(request, "plan.html", {
-        "rid": rid, "s": s, "intake": d.intake, "plans": plans, "emails": d.emails, "listings": d.listings,
-        "steps": trace(s.history), "pending": _pending_emails(s), "sent": d.sent,
+        "rid": rid, "s": s, "intake": d.intake, "plans": plans, "listings": d.listings,
+        "steps": trace(s.history),
         "model": pick_model(), "inventory": d.inventory, "vehicle_options": d.vehicle_options,
         "true_cost": d.true_cost, "timeline": d.timeline, "listing_checks": d.listing_checks,
         "adapter_errors": [e for src in d.sources if hasattr(src, "errors") for e in src.errors(d.intake)],
-        **sending_mode(s.sid),
     })
 
 
@@ -299,45 +242,9 @@ async def chat(request: Request, rid: str, message: str = Form(...)):
     s = _session(rid, request)
     if not s.used_llm:
         raise HTTPException(400, "Add an API key in .env to chat with the agent.")
-    if s.pending:
-        raise HTTPException(400, "Approve or deny the pending emails first.")
     s.chat.append({"role": "user", "text": message.strip()})
     await run_turn(s, message.strip())
     return RedirectResponse(f"/plan/{rid}", status_code=303)
-
-
-@app.post("/approve/{rid}")
-async def approve(request: Request, rid: str, decision: str = Form(...)):
-    s = _session(rid, request)
-    if not s.pending:
-        return RedirectResponse(f"/plan/{rid}", status_code=303)
-    if decision == "approve" and account_for(s.sid, s.deps.intake) is None:
-        raise HTTPException(400, "Connect your Gmail first.")
-    approvals = {
-        call.tool_call_id: True if decision == "approve" else ToolDenied("The user chose not to send these emails.")
-        for call in s.pending.approvals
-    }
-    s.chat.append({"role": "user", "text": "Approved sending." if decision == "approve" else "Don't send."})
-    await run_turn(s, None, DeferredToolResults(approvals=approvals))
-    return RedirectResponse(f"/plan/{rid}", status_code=303)
-
-
-@app.post("/send/{rid}", response_class=HTMLResponse)
-def send(request: Request, rid: str, selected: list[str] = Form(default=[]), confirm: str = Form("")):
-    """Manual send for no-LLM mode: the user ticks emails and confirms."""
-    s = _session(rid, request)
-    if confirm != "yes":
-        raise HTTPException(400, "Sending needs explicit confirmation.")
-    drafts = [d for d in s.deps.emails if d.offer_id in selected and d.to]
-    if not drafts:
-        return RedirectResponse(f"/plan/{rid}", status_code=303)
-    account = account_for(s.sid, s.deps.intake)
-    if account is None:
-        raise HTTPException(400, "Connect your Gmail first.")
-    sender, from_address = account
-    results = sender.send_all(redirect_for_testing(drafts), sender=from_address)
-    s.deps.sent.extend(results)
-    return templates.TemplateResponse(request, "sent.html", {"results": results, "rid": rid, **sending_mode(s.sid)})
 
 
 @app.get("/listing-check", response_class=HTMLResponse)
@@ -351,31 +258,3 @@ def listing_check(request: Request, text: str = Form(...), price_usd: str = Form
                                  int(bedrooms) if bedrooms.strip() else None, address)
     return templates.TemplateResponse(request, "listing_check.html", {
         "result": result, "form": {"text": text, "price_usd": price_usd, "bedrooms": bedrooms, "address": address}})
-
-
-# ---- Gmail connection ----
-
-@app.get("/auth/google/start")
-def google_start(request: Request, next: str = "/"):
-    if not accounts.oauth_configured():
-        raise HTTPException(400, "Google sign-in isn't set up: add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to .env.")
-    if not next.startswith("/"):
-        next = "/"
-    return RedirectResponse(accounts.start_url(request.state.sid, next), status_code=303)
-
-
-@app.get("/auth/google/callback", response_class=HTMLResponse)
-def google_callback(request: Request, code: str = "", state: str = "", error: str = ""):
-    if error:
-        return templates.TemplateResponse(request, "message.html", {"title": "Gmail not connected", "text": f"Google said: {error}."}, status_code=400)
-    try:
-        _, next_path = accounts.finish(code, state, request.state.sid)
-    except accounts.OAuthError as exc:
-        return templates.TemplateResponse(request, "message.html", {"title": "Gmail not connected", "text": str(exc)}, status_code=400)
-    return RedirectResponse(next_path, status_code=303)
-
-
-@app.post("/auth/google/disconnect")
-def google_disconnect(request: Request, next: str = Form("/")):
-    accounts.disconnect(request.state.sid)
-    return RedirectResponse(next if next.startswith("/") else "/", status_code=303)

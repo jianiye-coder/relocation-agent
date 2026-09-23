@@ -84,13 +84,6 @@ def test_plan_works_with_addresses_only(monkeypatch, intake):
     assert "one-way" in r.text and "2000 Mission St" in r.text
 
 
-def test_redirect_sends_everything_to_test_address(monkeypatch, intake):
-    from moving_agent.models import EmailDraft
-    monkeypatch.setenv("EMAIL_REDIRECT_TO", "me@example.com")
-    out = web.redirect_for_testing([EmailDraft(offer_id="a", to="x@uhaul.example", subject="Hi", body="b")])
-    assert out[0].to == "me@example.com" and "x@uhaul.example" in out[0].subject
-
-
 def test_zip_only_destination(monkeypatch):
     payload = {"places": [{"place name": "San Francisco", "state abbreviation": "CA", "latitude": "37.7509", "longitude": "-122.4153"}]}
     monkeypatch.setattr(geo.httpx, "get", lambda url, **kw: FakeResponse(payload))

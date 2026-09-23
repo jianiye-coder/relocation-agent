@@ -3,58 +3,13 @@
 {% block content %}
 <h1>Your moving plan</h1>
 <p class="lead">
-  {% if pending %}The agent has a plan and wants to email the providers. Review the emails below.
-  {% elif s.summary %}{{ s.summary|plain }}
+  {% if s.summary %}{{ s.summary|plain }}
   {% else %}Here's what we found.{% endif %}
 </p>
+<p class="muted">{{ intake.from_address or intake.from_zip }} → {{ intake.to_address or intake.to_zip }}</p>
 
 {% if s.error %}<div class="errors" role="alert">{{ s.error }}</div>{% endif %}
 
-{# Where emails will be sent from #}
-<div class="account-bar">
-  {% if connected_email %}
-    <span>Sending from <strong>{{ connected_email }}</strong></span>
-    <form method="post" action="/auth/google/disconnect"><input type="hidden" name="next" value="/plan/{{ rid }}"><button class="link-btn" type="submit">Disconnect</button></form>
-  {% elif oauth_configured %}
-    <span>Connect your Gmail so the agent can email providers for you. We can only send, never read your inbox.</span>
-    <a class="btn btn-secondary btn-sm" href="/auth/google/start?next=/plan/{{ rid }}">Connect Gmail</a>
-  {% else %}
-    <span class="muted">Dev mode: Google sign-in isn't set up, so emails use the server's {{ email_mode }} sender.</span>
-  {% endif %}
-</div>
-{% if redirect_to %}<p class="muted"><strong>Test mode:</strong> every email goes to {{ redirect_to }} instead of the provider.</p>{% endif %}
-
-{# The agent is waiting for approval to send #}
-{% for p in pending %}
-<div class="card raised approval" id="approval">
-  <h2>The agent wants to send {{ p.emails|length }} email(s)</h2>
-  <p class="muted">From {{ connected_email or intake.email }}. Nothing goes out until you approve.</p>
-  {% for e in p.emails %}
-  <details class="email-card" {% if loop.first %}open{% endif %}>
-    <summary><strong>To {{ e.to }}</strong> · {{ e.subject }}</summary>
-    <pre>{{ e.body }}</pre>
-  </details>
-  {% endfor %}
-  {% if oauth_configured and not connected_email %}
-    <div class="actions"><a class="btn btn-primary" href="/auth/google/start?next=/plan/{{ rid }}">Connect Gmail to send</a>
-      <form method="post" action="/approve/{{ rid }}"><input type="hidden" name="decision" value="deny"><button class="btn btn-secondary" type="submit">Don't send</button></form></div>
-  {% else %}
-  <div class="actions">
-    <form method="post" action="/approve/{{ rid }}" data-busy="Sending..."><input type="hidden" name="decision" value="approve"><button class="btn btn-primary" type="submit">Approve and send</button></form>
-    <form method="post" action="/approve/{{ rid }}"><input type="hidden" name="decision" value="deny"><button class="btn btn-secondary" type="submit">Don't send</button></form>
-  </div>
-  {% endif %}
-</div>
-{% endfor %}
-
-{% if sent %}
-<div class="card">
-  <h2>Emails</h2>
-  {% for r in sent %}
-  <div class="line"><div>{{ r.to }}</div><div>{% if r.ok %}<span class="ok">{{ "Saved" if "outbox" in r.detail else "Sent" }}</span>{% else %}<span class="bad">Failed</span>{% endif %}</div><div class="how muted">{{ r.detail }}</div></div>
-  {% endfor %}
-</div>
-{% endif %}
 
 {% if not plans %}
 <div class="errors">No combination covers everything you asked for. {% if s.used_llm %}Ask the agent below to try something else, or {% endif %}<a href="/">start over</a>.</div>
@@ -157,35 +112,21 @@
   <h2>Ask the agent</h2>
   <form method="post" action="/chat/{{ rid }}" class="chat" data-busy="Working...">
     <label for="message" class="sr-only">Message</label>
-    <input id="message" name="message" placeholder="e.g. Make it cheaper, or move on Saturday instead" {% if pending %}disabled{% endif %} required>
-    <button class="btn btn-primary" type="submit" {% if pending %}disabled{% endif %}>Send</button>
+    <input id="message" name="message" placeholder="e.g. Make it cheaper, or move on Saturday instead" required>
+    <button class="btn btn-primary" type="submit">Send</button>
   </form>
   <div class="pills" style="margin-top:12px">
     {% for q in ["Can it be cheaper?", "Try a container instead of a truck", "Should I ship my car or drive it?", "Don't use TaskRabbit"] %}
-    <form method="post" action="/chat/{{ rid }}" data-busy="Working..."><input type="hidden" name="message" value="{{ q }}"><button class="chip" type="submit" {% if pending %}disabled{% endif %}>{{ q }}</button></form>
+    <form method="post" action="/chat/{{ rid }}" data-busy="Working..."><input type="hidden" name="message" value="{{ q }}"><button class="chip" type="submit">{{ q }}</button></form>
     {% endfor %}
   </div>
-  {% if pending %}<p class="muted">Approve or deny the emails above before asking for changes.</p>{% endif %}
 </section>
 {% else %}
 <section class="block" style="margin-top:24px">
   <div class="card" style="background:var(--surface-soft);border:0">
     <h3>The agent is off</h3>
-    <p class="muted" style="margin:8px 0 0">This plan was made without an LLM. Add an API key to <code>.env</code> (Anthropic, Gemini or OpenAI) and restart to let the agent find alternatives, read your notes, chat and email providers.</p>
+    <p class="muted" style="margin:8px 0 0">This plan was made without an LLM. Add an API key to <code>.env</code> and restart to let the agent find alternatives and read your notes.</p>
   </div>
-  <h2 style="margin-top:24px">Contact these providers</h2>
-  <form method="post" action="/send/{{ rid }}">
-    {% for e in emails %}
-    <div class="email-card">
-      <label class="to"><input type="checkbox" name="selected" value="{{ e.offer_id }}" {% if e.to %}checked{% else %}disabled{% endif %}> To: {{ e.to or "no email on file" }}</label>
-      <h3>{{ e.subject }}</h3>
-      <pre>{{ e.body }}</pre>
-    </div>
-    {% endfor %}
-    <input type="hidden" name="confirm" value="yes">
-    <p class="muted">Nothing is sent until you click the button.</p>
-    <div class="actions"><button class="btn btn-primary" type="submit">Send {{ emails|length }} quote request(s)</button></div>
-  </form>
 </section>
 {% endif %}
 
