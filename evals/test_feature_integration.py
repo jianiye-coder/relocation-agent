@@ -4,6 +4,7 @@ Runs in CI (see .github/workflows/tests.yml) with no network and no credentials.
 """
 import asyncio
 import json
+import re
 from io import BytesIO
 from pathlib import Path
 
@@ -43,8 +44,14 @@ def test_two_homes_with_sourced_commutes(monkeypatch):
     real_commute = home.commute
     monkeypatch.setattr(home, "commute", lambda origin, dest, mode, departure=None: real_commute(origin, dest, mode, client=client, departure=departure))
     profile = fixture("intake/la_to_sf.json")
-    profile.update(pets="cat", candidate_addresses="1 Main St, San Francisco, CA\n2 Oak St, San Francisco, CA", commute_destination="1 Market St, San Francisco, CA")
-    response = TestClient(web.app).post("/plan", data=profile)
+    profile.update(pets="cat")
+    browser = TestClient(web.app)
+    response = browser.post("/plan", data=profile)
+    rid = re.search(r"/plan/(\w+)", str(response.url)).group(1)
+    for address in ("1 Main St, San Francisco, CA", "2 Oak St, San Francisco, CA"):
+        response = browser.post(f"/housing/{rid}/select", data={
+            "address": address, "commute_destination": "1 Market St, San Francisco, CA", "commute_mode": "drive",
+        })
     assert response.status_code == 200
     assert response.text.count("30 min") == 2
     assert "Internet availability is not configured" in response.text

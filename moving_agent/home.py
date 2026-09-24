@@ -2,11 +2,13 @@
 from __future__ import annotations
 import os
 from datetime import date, datetime, time, timezone
+from typing import Any, Callable
 from zoneinfo import ZoneInfo
 import httpx
 
 # The MVP city pair is LA -> SF; commutes are at the destination.
 DESTINATION_TZ = ZoneInfo("America/Los_Angeles")
+HOMEHARVEST_SOURCE = "HomeHarvest · Realtor.com (unofficial scrape)"
 
 def _now() -> str: return datetime.now(timezone.utc).isoformat()
 def _unavailable(source: str, message: str) -> dict: return {"available": False, "source": source, "message": message}
@@ -53,3 +55,84 @@ def schools(address: str) -> dict:
 def utilities(address: str) -> dict:
     if not address: return {"broadband":_unavailable("FCC broadband data", "Add a candidate address to check internet."), "electricity":_unavailable("NREL/OpenEI utility rates", "Add a candidate address to check electricity.")}
     return {"broadband":_unavailable("FCC broadband data", "Internet availability is not configured for this address."), "electricity":_unavailable("NREL/OpenEI utility rates", "Electricity availability is not configured for this address.")}
+
+
+def _field(value: Any, name: str, default: Any = None) -> Any:
+    return value.get(name, default) if isinstance(value, dict) else getattr(value, name, default)
+
+
+def _listing_photos(property_data: Any) -> list[str]:
+    """Extract the source's primary photo and alternates without assuming its exact shape."""
+    description = _field(property_data, "description")
+    candidates = [_field(description, "primary_photo"), *(_field(description, "alt_photos", []) or [])]
+    photos: list[str] = []
+    for candidate in candidates:
+        url = str(candidate)
+        if url.startswith("https://") and url not in photos:
+            photos.append(url)
+    return photos
+
+
+def _as_iso(value: Any) -> str | None:
+    return value.isoformat() if isinstance(value, (date, datetime)) else value
+
+
+def _display_value(value: Any) -> str | None:
+    if value is None:
+        return None
+    value = getattr(value, "value", value)
+    return str(value).replace("_", " ").title()
+
+
+def rental_listings(location: str, min_rent: int | None = None, max_rent: int | None = None,
+                    bedrooms: int | None = None, limit: int = 12,
+                    scraper: Callable[..., list[Any]] | None = None) -> dict:
+    """Return current Realtor.com rentals through HomeHarvest.
+
+    HomeHarvest is an unofficial scraper, not an MLS feed. Its live data can
+    change or become unavailable without notice, so callers must show its
+    source and never substitute sample homes.
+    """
+    location = location.strip()
+    if not location:
+        return _unavailable(HOMEHARVEST_SOURCE, "Enter a city, neighborhood, area, or ZIP code.") | {"listings": []}
+
+    if scraper is None:
+        try:
+            from homeharvest import scrape_property
+        except ImportError:
+            return _unavailable(HOMEHARVEST_SOURCE, "HomeHarvest is not installed. Install the project dependencies and try again.") | {"listings": []}
+        scraper = scrape_property
+    options: dict[str, Any] = {
+        "location": location, "listing_type": "for_rent", "return_type": "pydantic",
+        "price_min": min_rent, "price_max": max_rent,
+        "beds_min": bedrooms, "beds_max": bedrooms,
+        "sort_by": "list_date", "sort_direction": "desc", "limit": min(max(limit, 1), 50),
+        # The listing detail call supplies the full photo gallery used by the page.
+        "extra_property_data": True, "parallel": False,
+    }
+    options = {key: value for key, value in options.items() if value is not None}
+    try:
+        records = scraper(**options)
+        if not isinstance(records, list):
+            raise ValueError("HomeHarvest response was not a list")
+        listings = []
+        for item in records:
+            address, description = _field(item, "address"), _field(item, "description")
+            formatted_address = _field(address, "formatted_address") or _field(address, "full_line")
+            if not formatted_address:
+                continue
+            listings.append({
+                "id": _field(item, "listing_id") or _field(item, "mls_id") or _field(item, "property_id", ""),
+                "address": formatted_address, "rent": _field(item, "list_price"),
+                "bedrooms": _field(description, "beds"), "bathrooms": _field(description, "baths_full"),
+                "square_feet": _field(description, "sqft"),
+                "property_type": _display_value(_field(description, "style") or _field(description, "type")),
+                "listed_date": _as_iso(_field(item, "list_date")), "last_seen_date": _as_iso(_field(item, "last_update_date")),
+                "days_on_market": _field(item, "days_on_mls"), "status": _field(item, "status"),
+                "latitude": _field(item, "latitude"), "longitude": _field(item, "longitude"),
+                "photos": _listing_photos(item), "disclaimer": "Data supplied by Realtor.com via HomeHarvest; availability and details can change.",
+            })
+        return {"available": True, "source": HOMEHARVEST_SOURCE, "fetched_at": _now(), "listings": listings}
+    except Exception:
+        return _unavailable(HOMEHARVEST_SOURCE, "Live Realtor.com rental listings are unavailable right now. Try again shortly.") | {"listings": []}

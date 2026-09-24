@@ -35,6 +35,7 @@ Set only your preferred LLM key. If several are set, selection priority is Flatk
 | `FLATKEY_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_API_KEY` / `OPENAI_API_KEY` | Choose one. With no key, use text inventory and deterministic planning. |
 | `MOVING_AGENT_MODEL` | Optional provider-prefixed model override. |
 | `GOOGLE_MAPS_API_KEY` | Google geocoding/distance and candidate commute. Move geocoding/distance can fall back to Census/OSRM; candidate commute reports unavailable. |
+| None | The Find a home page retrieves active rentals and photos from Realtor.com through [HomeHarvest](https://github.com/ZacharyHampton/HomeHarvest). It is an unofficial scrape, so availability can change and searches may be rate-limited; never treat its results as an MLS feed. |
 | `FMCSA_WEB_KEY` | Carrier lookup. Missing credentials produce a typed unavailable/auth state. |
 | `WARP_API_KEY` | Active key for PR #7. Sandbox keys return mock data; live keys request real quotes. No booking is called. |
 | `WARP_PRODUCTION_API_KEY` | Optional local storage only; the application does not read or switch to it. |
