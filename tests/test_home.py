@@ -1,6 +1,6 @@
 import httpx
 
-from moving_agent.home import commute, utilities
+from moving_agent.home import commute, rental_listings, utilities
 
 
 def test_commute_requires_google_key(monkeypatch):
@@ -91,3 +91,48 @@ def test_schools_are_explicitly_unavailable():
     from moving_agent.home import schools
     result = schools("1 Main St, San Francisco, CA")
     assert result["available"] is False and "school" in result["message"].lower()
+
+
+def test_rental_listings_normalize_homeharvest_response():
+    captured = {}
+
+    def scraper(**options):
+        captured.update(options)
+        return [{
+            "listing_id": "listing-1", "address": {"formatted_address": "123 Valencia St, San Francisco, CA 94110"},
+            "list_price": 2895, "description": {"beds": 1, "baths_full": 1, "sqft": 610, "style": "CONDO",
+                                                    "primary_photo": "https://images.example/listing-1.jpg",
+                                                    "alt_photos": ["https://images.example/listing-2.jpg"]},
+            "list_date": "2026-09-20T00:00:00.000Z", "last_update_date": "2026-09-23T12:00:00.000Z",
+            "days_on_mls": 3, "status": "for_rent",
+        }]
+
+    result = rental_listings("94110", min_rent=2500, max_rent=3000, bedrooms=1, scraper=scraper)
+    assert result["available"] is True and result["source"] == "HomeHarvest · Realtor.com (unofficial scrape)"
+    assert result["listings"] == [{"id": "listing-1", "address": "123 Valencia St, San Francisco, CA 94110",
+                                   "rent": 2895, "bedrooms": 1, "bathrooms": 1, "square_feet": 610,
+                                   "property_type": "Condo", "listed_date": "2026-09-20T00:00:00.000Z",
+                                   "last_seen_date": "2026-09-23T12:00:00.000Z", "days_on_market": 3, "status": "for_rent",
+                                   "latitude": None, "longitude": None,
+                                   "photos": ["https://images.example/listing-1.jpg", "https://images.example/listing-2.jpg"],
+                                   "disclaimer": "Data supplied by Realtor.com via HomeHarvest; availability and details can change."}]
+    assert captured == {"location": "94110", "listing_type": "for_rent", "return_type": "pydantic",
+                        "price_min": 2500, "price_max": 3000, "beds_min": 1, "beds_max": 1,
+                        "sort_by": "list_date", "sort_direction": "desc", "limit": 12,
+                        "extra_property_data": True, "parallel": False}
+
+
+def test_rental_listings_reports_scraper_errors_without_a_fallback():
+    result = rental_listings("94110", scraper=lambda **_: (_ for _ in ()).throw(RuntimeError("blocked")))
+    assert result["available"] is False and result["listings"] == [] and "unavailable" in result["message"]
+
+
+def test_rental_listings_accepts_a_city_or_neighborhood():
+    captured = {}
+    result = rental_listings("Lakeview, Chicago", scraper=lambda **options: captured.update(options) or [])
+    assert result["available"] is True and captured["location"] == "Lakeview, Chicago"
+
+
+def test_rental_listings_requires_a_destination_area():
+    result = rental_listings("", scraper=lambda **_: [])
+    assert result["available"] is False and "city, neighborhood, area, or ZIP" in result["message"]

@@ -89,3 +89,19 @@ def test_zip_only_destination(monkeypatch):
     monkeypatch.setattr(geo.httpx, "get", lambda url, **kw: FakeResponse(payload))
     place = geo.geocode("94110")
     assert place.zip == "94110" and "ZIP center" in place.matched_address
+
+
+def test_city_state_destination_uses_a_representative_zip_when_census_has_no_match(monkeypatch):
+    calls = []
+
+    def fake_get(url, **kwargs):
+        calls.append(url)
+        if url == geo.CENSUS_URL:
+            return FakeResponse({"result": {"addressMatches": []}})
+        return FakeResponse({"places": [{"place name": "Mountain View", "post code": "94040", "latitude": "37.3861", "longitude": "-122.0839"}]})
+
+    monkeypatch.delenv("GOOGLE_MAPS_API_KEY", raising=False)
+    monkeypatch.setattr(geo.httpx, "get", fake_get)
+    place = geo.geocode("Mountain View, CA")
+    assert place.zip == "94040" and "city center" in place.matched_address
+    assert any(url.startswith("https://api.zippopotam.us/us/CA/") for url in calls)

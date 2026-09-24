@@ -21,7 +21,7 @@ def build(move_date: date, lease_end: date | None = None, today: date | None = N
     d = lambda days: move_date + timedelta(days=days)
     tasks = [
         Task(due=d(-42), title="Start the housing search and compare moving options"),
-        Task(due=d(-35), title="Send quote requests to movers, trucks and storage", detail="The agent drafts them; you approve each send."),
+        Task(due=d(-35), title="Get quotes from movers, trucks and storage", detail="Use each provider's own quote page; compare them against your plan."),
         Task(due=d(-28), title="Book movers or truck", detail="Check the mover's USDOT/MC registration first."),
         Task(due=d(-21), title="Schedule electricity, gas and internet at the new address", detail="Start service the day before you arrive."),
         Task(due=d(-14), title="Pack things you won't need for two weeks"),

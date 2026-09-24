@@ -18,6 +18,7 @@ from pydantic import BaseModel
 CENSUS_URL = "https://geocoding.geo.census.gov/geocoder/locations/onelineaddress"
 OSRM_URL = "https://router.project-osrm.org/route/v1/driving/{a_lon},{a_lat};{b_lon},{b_lat}"
 ZIP_URL = "https://api.zippopotam.us/us/{zip}"
+CITY_URL = "https://api.zippopotam.us/us/{state}/{city}"
 GOOGLE_GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
 GOOGLE_ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes"
 METERS_PER_MILE = 1609.344
@@ -47,7 +48,14 @@ def geocode(address: str) -> Place:
     if re.fullmatch(r"\d{5}", address):
         return _zip_only(address)
     key = os.getenv("GOOGLE_MAPS_API_KEY")
-    return _google_geocode(address, key) if key else _census_geocode(address)
+    if key:
+        return _google_geocode(address, key)
+    try:
+        return _census_geocode(address)
+    except GeoError:
+        # Census only returns street-address matches. A city/state is enough to
+        # start planning, so use the city's representative ZIP center instead.
+        return _city_only(address)
 
 
 def _zip_only(zip_code: str) -> Place:
@@ -60,6 +68,37 @@ def _zip_only(zip_code: str) -> Place:
     return Place(
         matched_address=f"{p['place name']}, {p['state abbreviation']} {zip_code} (ZIP center)",
         zip=zip_code, lat=float(p["latitude"]), lon=float(p["longitude"]),
+    )
+
+
+def _city_only(location: str) -> Place:
+    """Resolve ``City, ST`` to an exact city match and its first ZIP center.
+
+    This intentionally avoids guessing for broad labels (for example, "East
+    Bay"). Those labels need a city or neighborhood before a move quote can
+    usefully estimate a driving route.
+    """
+    match = re.fullmatch(r"\s*(.+?)\s*,\s*([A-Za-z]{2})\s*", location)
+    if not match:
+        raise GeoError("We couldn't resolve that area. Add a city and state, for example Mountain View, CA.")
+    city, state = match.groups()
+    r = httpx.get(
+        CITY_URL.format(state=state.upper(), city=city),
+        timeout=TIMEOUT,
+    )
+    if r.status_code == 404:
+        raise GeoError("We couldn't resolve that area. Add a city and state, for example Mountain View, CA.")
+    r.raise_for_status()
+    places = r.json().get("places", [])
+    exact = next((p for p in places if p.get("place name", "").casefold() == city.casefold()), None)
+    if not exact:
+        raise GeoError("We couldn't resolve that area. Add a city and state, for example Mountain View, CA.")
+    zip_code = exact["post code"]
+    return Place(
+        matched_address=f"{exact['place name']}, {state.upper()} {zip_code} (city center)",
+        zip=zip_code,
+        lat=float(exact["latitude"]),
+        lon=float(exact["longitude"]),
     )
 
 

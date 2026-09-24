@@ -8,6 +8,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
+from urllib.parse import urlencode
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Form, HTTPException, Request
@@ -22,6 +23,7 @@ from ..models import HomeSize, Intake
 from ..adapters import AdapterError, ErrorCode, FMCSAAdapter, QuoteCache, RegistrySource, default_registry
 from ..inventory import estimate as estimate_inventory
 from ..listings import check as check_listing_rules
+from .views import option_views, timeline_view
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
@@ -87,9 +89,6 @@ async def ensure_sid(request: Request, call_next):
 
 # Plain-language messages for fields whose raw validator text would confuse users.
 FIELD_MESSAGES = {
-    "candidate_addresses": "Add at most two candidate homes, one address per line.",
-    "commute_mode": "Choose drive, transit, walk or bicycle for the commute.",
-    "commute_departure_time": "Use a 24-hour time like 08:30 for when you leave.",
 }
 
 
@@ -200,6 +199,15 @@ async def run_turn(s: Session, prompt: str) -> None:
     s.chat.append({"role": "agent", "text": run.output.summary})
 
 
+def _candidate_home_results(intake: Intake) -> list[dict]:
+    """Populate decision data only for homes the user chose from Find a home."""
+    leave = home.departure_time(intake.move_date, intake.commute_departure_time)
+    return [{"address": address,
+             "commute": home.commute(address, intake.commute_destination, intake.commute_mode, departure=leave),
+             "schools": home.schools(address), "utilities": home.utilities(address)}
+            for address in intake.candidate_addresses]
+
+
 @app.post("/plan", response_class=HTMLResponse)
 async def plan(
     request: Request,
@@ -228,10 +236,6 @@ async def plan(
     vehicles: list[str] = Form(default=[]),
     lease_end: str = Form(""),
     monthly_rent: str = Form(""),
-    candidate_addresses: str = Form(""),
-    commute_destination: str = Form(""),
-    commute_mode: str = Form("drive"),
-    commute_departure_time: str = Form(""),
 ):
     from_zip, to_zip, distance_miles, geo_errors = _fill_from_addresses(
         from_address, to_address, from_zip.strip(), to_zip.strip(), distance_miles.strip()
@@ -249,9 +253,6 @@ async def plan(
             inventory_text=inventory_text, household_size=household_size,
             pets=[p.strip() for p in pets.split(",") if p.strip()], vehicles=vehicles,
             lease_end=lease_end or None, monthly_rent=int(monthly_rent) if monthly_rent.strip() else None,
-            candidate_addresses=[a.strip() for a in candidate_addresses.splitlines() if a.strip()],
-            commute_destination=commute_destination.strip(), commute_mode=commute_mode.lower(),
-            commute_departure_time=commute_departure_time.strip(),
         )
     except (ValidationError, ValueError) as exc:
         errs = exc.errors() if isinstance(exc, ValidationError) else [{"loc": ("form",), "msg": str(exc)}]
@@ -265,11 +266,7 @@ async def plan(
             intake = intake.model_copy(update={"volume_cuft": max(20, min(3000, inventory.total_cuft)), "weight_lbs": inventory.total_lbs})
 
     sid = request.state.sid
-    leave = home.departure_time(intake.move_date, intake.commute_departure_time)
-    home_results = [{"address": address,
-                     "commute": home.commute(address, intake.commute_destination, intake.commute_mode, departure=leave),
-                     "schools": home.schools(address), "utilities": home.utilities(address)}
-                    for address in intake.candidate_addresses]
+    home_results = _candidate_home_results(intake)
     deps = AgentDeps(intake=intake, sources=SOURCES, inventory=inventory, home_results=home_results)
     s = Session(sid=sid, intake=intake, deps=deps, used_llm=model_configured())
     rid = uuid.uuid4().hex[:12]
@@ -299,12 +296,16 @@ def show_plan(request: Request, rid: str):
     plans = d.plans
     if plans:
         plans = [plans[d.chosen]] + [p for i, p in enumerate(plans) if i != d.chosen]
+    move_day = plans[0].move_date if plans else d.intake.move_date
     return templates.TemplateResponse(request, "plan.html", {
         "rid": rid, "s": s, "intake": d.intake, "plans": plans, "listings": d.listings,
+        "options": option_views(plans, d.intake.budget_usd, d.intake.move_date),
+        "tl": timeline_view(d.timeline, move_day) if d.timeline else None,
         "steps": trace(s.history),
         "model": pick_model(), "inventory": d.inventory, "vehicle_options": d.vehicle_options,
         "true_cost": d.true_cost, "timeline": d.timeline, "listing_checks": d.listing_checks,
         "home_results": d.home_results,
+        "home_selected": request.query_params.get("home_selected") == "1",
         "adapter_errors": [e for src in d.sources if hasattr(src, "errors") for e in src.errors(d.intake)],
     })
 
@@ -322,6 +323,129 @@ async def chat(request: Request, rid: str, message: str = Form(...)):
 @app.get("/listing-check", response_class=HTMLResponse)
 def listing_check_form(request: Request):
     return templates.TemplateResponse(request, "listing_check.html", {"result": None, "form": {}})
+
+
+# ---- housing search ----
+
+def _housing_filters(location: str, min_rent: str, max_rent: str, bedrooms: str) -> tuple[dict, list[str]]:
+    """Validate browser query strings before sending only requested HomeHarvest filters."""
+    errors: list[str] = []
+    values: dict[str, int | str | None] = {"location": location.strip(), "min_rent": None, "max_rent": None, "bedrooms": None}
+    for key, raw, label in (("min_rent", min_rent, "minimum rent"), ("max_rent", max_rent, "maximum rent"), ("bedrooms", bedrooms, "bedrooms")):
+        if not raw.strip():
+            continue
+        try:
+            values[key] = int(raw)
+        except ValueError:
+            errors.append(f"Enter a whole number for {label}.")
+    if values["min_rent"] is not None and values["max_rent"] is not None and values["min_rent"] > values["max_rent"]:
+        errors.append("Minimum rent cannot be higher than maximum rent.")
+    if values["bedrooms"] is not None and not 0 <= values["bedrooms"] <= 10:
+        errors.append("Bedrooms must be between 0 and 10.")
+    return values, errors
+
+
+def _housing_links(filters: dict, rid: str, commute: dict, sort: str) -> dict[str, str]:
+    """Preserve a housing search while switching a view or clearing its filters."""
+    query = {key: value for key, value in {
+        **filters, "rid": rid, "commute_destination": commute["destination"],
+        "commute_mode": commute["mode"], "sort": sort,
+    }.items() if value not in (None, "")}
+    base = "/housing"
+    return {
+        "list": f"{base}?{urlencode({**query, 'view': 'list'})}",
+        "map": f"{base}?{urlencode({**query, 'view': 'map'})}",
+        "clear": f"{base}?{urlencode({'rid': rid})}" if rid else base,
+    }
+
+
+def _sort_housing_results(results: dict, sort: str, commute: dict) -> str | None:
+    """Sort locally; commute lookups happen only after an explicit commute-sort request."""
+    listings = results.get("listings", [])
+    if sort == "rent_low":
+        listings.sort(key=lambda home: (home["rent"] is None, home["rent"] or 0))
+    elif sort == "newest":
+        listings.sort(key=lambda home: home.get("listed_date") or "", reverse=True)
+    elif sort == "commute":
+        if not commute["destination"]:
+            return "Add a work or school destination before sorting by commute."
+        for listing in listings:
+            route = home.commute(listing["address"], commute["destination"], commute["mode"])
+            listing["commute_minutes"] = route.get("minutes") if route.get("available") else None
+        listings.sort(key=lambda home: (home.get("commute_minutes") is None, home.get("commute_minutes") or 0))
+    return None
+
+
+def _map_points(listings: list[dict]) -> list[dict]:
+    """Project listing coordinates to a small, dependency-free map overview."""
+    located = [home for home in listings if isinstance(home.get("latitude"), (int, float)) and isinstance(home.get("longitude"), (int, float))]
+    if not located:
+        return []
+    lats, lngs = [home["latitude"] for home in located], [home["longitude"] for home in located]
+    lat_span, lng_span = max(lats) - min(lats), max(lngs) - min(lngs)
+    points = []
+    for index, listing in enumerate(located, start=1):
+        left = 50 if lng_span == 0 else 10 + (listing["longitude"] - min(lngs)) / lng_span * 80
+        top = 50 if lat_span == 0 else 90 - ((listing["latitude"] - min(lats)) / lat_span * 80)
+        points.append({"id": listing["id"], "label": index, "address": listing["address"], "left": round(left, 1), "top": round(top, 1)})
+    return points
+
+
+@app.get("/housing", response_class=HTMLResponse)
+def housing(request: Request, location: str = "", zip_code: str = "", min_rent: str = "", max_rent: str = "", bedrooms: str = "",
+            rid: str = "", commute_destination: str = "", commute_mode: str = "drive",
+            sort: str = "newest", view: str = "list"):
+    plan_session = _session(rid, request) if rid else None
+    # Keep old shared ZIP links working while making the user-facing input a flexible area search.
+    location = location.strip() or zip_code.strip()
+    if plan_session and not location:
+        location = plan_session.intake.to_zip
+    filters, errors = _housing_filters(location, min_rent, max_rent, bedrooms)
+    searched = bool(location)
+    results = None
+    commute = {"destination": commute_destination, "mode": commute_mode}
+    if sort not in {"newest", "rent_low", "commute"}:
+        sort = "newest"
+    if view not in {"list", "map"}:
+        view = "list"
+    if searched and not errors:
+        results = home.rental_listings(**filters)
+        if results.get("available"):
+            sort_error = _sort_housing_results(results, sort, commute)
+            if sort_error:
+                errors.append(sort_error)
+    return templates.TemplateResponse(request, "housing.html", {
+        "filters": {"location": location, "min_rent": min_rent, "max_rent": max_rent, "bedrooms": bedrooms},
+        "errors": errors, "searched": searched, "results": results, "rid": rid,
+        "commute": commute, "sort": sort, "view": view,
+        "links": _housing_links(filters, rid, commute, sort),
+        "map_points": _map_points(results["listings"]) if results and results.get("available") else [],
+        "saved_addresses": plan_session.intake.candidate_addresses if plan_session else [],
+    })
+
+
+@app.post("/housing/{rid}/select")
+def select_candidate_home(request: Request, rid: str, address: str = Form(...), commute_destination: str = Form(""),
+                          commute_mode: str = Form("drive")):
+    """Attach one Find-a-home result to the current move plan (at most two)."""
+    s = _session(rid, request)
+    address = address.strip()
+    if not address:
+        raise HTTPException(422, "Choose a home first.")
+    if commute_mode not in {"drive", "transit", "walk", "bicycle"}:
+        raise HTTPException(422, "Choose drive, transit, walk or bicycle for the commute.")
+    addresses = s.intake.candidate_addresses
+    if address not in addresses and len(addresses) >= 2:
+        raise HTTPException(422, "Your plan already has two candidate homes.")
+    updated = s.intake.model_copy(update={
+        "candidate_addresses": addresses if address in addresses else [*addresses, address],
+        "commute_destination": commute_destination.strip(), "commute_mode": commute_mode,
+        "commute_departure_time": "",
+    })
+    s.intake = updated
+    s.deps.intake = updated
+    s.deps.home_results = _candidate_home_results(updated)
+    return RedirectResponse(f"/plan/{rid}?home_selected=1", status_code=303)
 
 
 @app.post("/listing-check", response_class=HTMLResponse)

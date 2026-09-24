@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Find a home · Relocation agent{% endblock %}
+{% block content %}
+{% macro home_card(home) -%}
+  <article id="home-{{ home.id }}" class="home-card{% if home.photos %} has-photo{% endif %}">
+    {% if home.photos %}
+    <div class="home-media"><img src="{{ home.photos[0] }}" alt="Photo of {{ home.address }}" loading="lazy" width="640" height="480">{% if home.photos|length > 1 %}<span class="photo-count">{{ home.photos|length }} photos</span>{% endif %}</div>
+    {% endif %}
+    <div class="home-main"><h3>{{ home.address }}</h3><p class="muted">{{ home.property_type or "Rental home" }}{% if home.bedrooms is not none %} · {{ "Studio" if home.bedrooms == 0 else home.bedrooms ~ " bed" }}{% endif %}{% if home.bathrooms is not none %} · {{ home.bathrooms }} bath{% endif %}{% if home.square_feet %} · {{ "{:,}".format(home.square_feet) }} sq ft{% endif %}</p></div>
+    <p class="home-rent">{% if home.rent is not none %}${{ "{:,}".format(home.rent) }}<span>/mo</span>{% else %}Rent unavailable{% endif %}</p>
+    <p class="muted home-fresh">{% if home.listed_date %}Listed {{ home.listed_date[:10] }}{% endif %}{% if home.days_on_market is not none %} · {{ home.days_on_market }} day{{ "s" if home.days_on_market != 1 }} on market{% endif %}{% if home.commute_minutes is defined and home.commute_minutes is not none %} · {{ home.commute_minutes }} min {{ commute.mode }} commute{% endif %}</p>
+    {% if rid %}
+      <form class="home-select" method="post" action="/housing/{{ rid }}/select" data-busy="Adding this home to your plan…">
+        <input type="hidden" name="address" value="{{ home.address }}"><input type="hidden" name="commute_destination" value="{{ commute.destination }}"><input type="hidden" name="commute_mode" value="{{ commute.mode }}">
+        {% if home.address in saved_addresses %}<button class="btn btn-secondary btn-sm" type="button" disabled>Added to your plan</button>{% elif saved_addresses|length >= 2 %}<button class="btn btn-secondary btn-sm" type="button" disabled>Your plan has 2 homes</button>{% else %}<button class="btn btn-secondary btn-sm" type="submit">Add to my move plan</button>{% endif %}
+      </form>
+    {% endif %}
+    {% if home.photos|length > 1 %}<details class="home-gallery"><summary>View all {{ home.photos|length }} photos</summary><div>{% for photo in home.photos[1:] %}<img src="{{ photo }}" alt="Additional photo of {{ home.address }}" loading="lazy" width="320" height="240">{% endfor %}</div></details>{% elif not home.photos %}<p class="muted home-no-photo">No photo was found for this listing.</p>{% endif %}
+    {% if home.disclaimer %}<p class="muted home-disclaimer">{{ home.disclaimer }}</p>{% endif %}
+  </article>
+{%- endmacro %}
+<h1>Find a home</h1>
+<p class="lead">Search active rentals with photos from Realtor.com. Results never come from our sample catalog.</p>
+
+<form class="housing-search" method="get" action="/housing" role="search" aria-label="Search rental listings">
+  {% if rid %}<input type="hidden" name="rid" value="{{ rid }}">{% endif %}
+  <div class="field"><label for="location">Destination area</label><input id="location" name="location" autocomplete="address-level2" required value="{{ filters.location }}" placeholder="e.g. Lakeview, Chicago or South Bay, CA"><p class="field-help">Search a city, neighborhood, larger area, or ZIP code.</p></div>
+  <div class="row">
+    <div class="field"><label for="min_rent">Minimum monthly rent <span class="hint">· optional</span></label><input id="min_rent" name="min_rent" inputmode="numeric" min="0" value="{{ filters.min_rent }}" placeholder="e.g. 2200"></div>
+    <div class="field"><label for="max_rent">Maximum monthly rent <span class="hint">· optional</span></label><input id="max_rent" name="max_rent" inputmode="numeric" min="0" value="{{ filters.max_rent }}" placeholder="e.g. 3200"></div>
+  </div>
+  <div class="field"><label for="bedrooms">Bedrooms <span class="hint">· optional; 0 is a studio</span></label><select id="bedrooms" name="bedrooms"><option value="">Any</option>{% for n in range(0, 5) %}<option value="{{ n }}"{% if filters.bedrooms == n|string %} selected{% endif %}>{{ "Studio" if n == 0 else n ~ " bedroom" ~ ("s" if n != 1 else "") }}</option>{% endfor %}</select></div>
+  <fieldset class="commute-fields"><legend>Compare commute <span class="hint">· optional</span></legend>
+    <div class="field"><label for="commute_destination">Work or school destination</label><input id="commute_destination" name="commute_destination" value="{{ commute.destination }}" placeholder="Address, city, state"></div>
+    <div class="field"><label for="commute_mode">Commute mode</label><select id="commute_mode" name="commute_mode">{% for mode in ["drive", "transit", "walk", "bicycle"] %}<option value="{{ mode }}"{% if commute.mode == mode %} selected{% endif %}>{{ mode|capitalize }}</option>{% endfor %}</select></div>
+  </fieldset>
+  <input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="view" value="{{ view }}">
+  <div class="actions"><button class="btn btn-primary" type="submit" data-busy="Searching live listings…">Search live listings</button></div>
+</form>
+
+{% if errors %}<div class="errors" role="alert"><ul>{% for error in errors %}<li>{{ error }}</li>{% endfor %}</ul></div>{% endif %}
+
+{% if results %}
+  {% if results.available %}
+    <section class="block housing-results" aria-live="polite">
+      <h2>{{ results.listings|length }} active listing{{ "s" if results.listings|length != 1 }} near {{ filters.location }}</h2>
+      <p class="muted section-lead">Source: {{ results.source }} · checked {{ results.fetched_at|checked }}. Listing availability can change; confirm with the property before applying or paying.</p>
+      {% if results.listings %}
+        <div class="housing-toolbar">
+          <div class="filter-chips" aria-label="Active filters"><span class="filter-label">Filters</span><span class="filter-chip">{{ filters.location }}</span>{% if filters.min_rent %}<span class="filter-chip">Min ${{ "{:,}".format(filters.min_rent|int) }}</span>{% endif %}{% if filters.max_rent %}<span class="filter-chip">Max ${{ "{:,}".format(filters.max_rent|int) }}</span>{% endif %}{% if filters.bedrooms != "" %}<span class="filter-chip">{{ "Studio" if filters.bedrooms == "0" else filters.bedrooms ~ " bed" }}</span>{% endif %}<a class="clear-filters" href="{{ links["clear"] }}">Clear</a></div>
+          <div class="housing-controls">
+            <form method="get" action="/housing" class="sort-control"><input type="hidden" name="location" value="{{ filters.location }}"><input type="hidden" name="min_rent" value="{{ filters.min_rent }}"><input type="hidden" name="max_rent" value="{{ filters.max_rent }}"><input type="hidden" name="bedrooms" value="{{ filters.bedrooms }}"><input type="hidden" name="rid" value="{{ rid }}"><input type="hidden" name="commute_destination" value="{{ commute.destination }}"><input type="hidden" name="commute_mode" value="{{ commute.mode }}"><input type="hidden" name="view" value="{{ view }}"><label class="sr-only" for="sort">Sort listings</label><select id="sort" name="sort" onchange="this.form.submit()"><option value="newest"{% if sort == "newest" %} selected{% endif %}>Newest</option><option value="rent_low"{% if sort == "rent_low" %} selected{% endif %}>Rent: low to high</option><option value="commute"{% if sort == "commute" %} selected{% endif %}>Shortest commute</option></select><noscript><button class="btn btn-secondary btn-sm" type="submit">Sort</button></noscript></form>
+            <nav class="view-toggle" aria-label="Results view"><a href="{{ links.list }}"{% if view == "list" %} class="is-active" aria-current="page"{% endif %}>List</a><a href="{{ links.map }}"{% if view == "map" %} class="is-active" aria-current="page"{% endif %}>Map</a></nav>
+          </div>
+        </div>
+        {% if view == "map" %}
+          {% if map_points %}<section class="listing-map" aria-label="Approximate map of the listed homes"><p class="sr-only">Choose a numbered home on the map to jump to its details.</p>{% for point in map_points %}<a class="map-pin" href="#home-{{ point.id }}" style="--x:{{ point.left }}%; --y:{{ point.top }}%" aria-label="{{ point.label }}. {{ point.address }}">{{ point.label }}</a>{% endfor %}</section>{% else %}<p class="muted map-unavailable">This source did not provide coordinates for these homes. Switch to List to compare them.</p>{% endif %}
+        {% endif %}
+        <div class="home-list{% if view == "map" %} map-list{% endif %}">{% for home in results.listings %}{{ home_card(home) }}{% endfor %}</div>
+      {% else %}
+        <div class="card"><h3>No active listings match those filters</h3><p class="muted" style="margin:8px 0 0">Try a nearby ZIP, a higher maximum rent, or any number of bedrooms.</p></div>
+      {% endif %}
+    </section>
+  {% else %}
+    <div class="errors" role="alert">{{ results.message }} · {{ results.source }}</div>
+  {% endif %}
+{% elif not searched %}
+  <div class="card"><h2>Start with a destination</h2><p class="muted" style="margin:8px 0 0">Enter a city, neighborhood, larger area, or ZIP code to search currently active rentals.</p></div>
+{% endif %}
+{% endblock %}
