@@ -89,6 +89,9 @@ async def ensure_sid(request: Request, call_next):
 
 # Plain-language messages for fields whose raw validator text would confuse users.
 FIELD_MESSAGES = {
+    "from_zip": "Moving from: enter a street address, city or ZIP we can find.",
+    "to_zip": "Moving to: enter a city, neighborhood or ZIP we can find.",
+    "distance_miles": "Enter where you're moving from and to so we can work out the distance.",
 }
 
 
@@ -128,7 +131,7 @@ def api_place(address: str):
     except geo.GeoError as exc:
         return JSONResponse({"error": str(exc)}, status_code=422)
     except Exception:
-        return JSONResponse({"error": "Address lookup is unavailable right now. Enter the ZIP yourself."}, status_code=502)
+        return JSONResponse({"error": "Address lookup is unavailable right now. Try again in a moment."}, status_code=502)
 
 
 @app.get("/api/geo/distance")
@@ -138,7 +141,7 @@ def api_distance(from_address: str, to_address: str):
     except geo.GeoError as exc:
         return JSONResponse({"error": str(exc)}, status_code=422)
     except Exception:
-        return JSONResponse({"error": "Address lookup is unavailable right now. Enter the ZIP and distance yourself."}, status_code=502)
+        return JSONResponse({"error": "Address lookup is unavailable right now. Try again in a moment."}, status_code=502)
     d = geo.driving_distance(a, b)
     return {"from": a.model_dump(), "to": b.model_dump(), "distance_miles": d.miles, "distance_source": d.source}
 
@@ -152,8 +155,10 @@ def _fill_from_addresses(from_address: str, to_address: str, from_zip: str, to_z
             continue
         try:
             places[label] = geo.geocode(addr)
-        except Exception as exc:
-            errors.append(f"{label}_address: {exc}")
+        except geo.GeoError as exc:
+            errors.append(f"{'Moving from' if label == 'from' else 'Moving to'}: {exc}")
+        except Exception:
+            errors.append(f"{'Moving from' if label == 'from' else 'Moving to'}: address lookup is unavailable right now. Try again in a moment.")
     from_zip = from_zip or (places["from"].zip if "from" in places else "")
     to_zip = to_zip or (places["to"].zip if "to" in places else "")
     if not distance and from_address and to_address and not errors:
@@ -161,8 +166,8 @@ def _fill_from_addresses(from_address: str, to_address: str, from_zip: str, to_z
             a = places.get("from") or geo.geocode(from_address)
             b = places.get("to") or geo.geocode(to_address)
             distance = str(geo.driving_distance(a, b).miles)
-        except Exception as exc:
-            errors.append(f"distance_miles: {exc}")
+        except Exception:
+            errors.append("We couldn't calculate the driving distance between those addresses. Try again in a moment.")
     return from_zip, to_zip, distance, errors
 
 
@@ -254,7 +259,7 @@ async def plan(
         from_address, to_address, from_zip.strip(), to_zip.strip(), distance_miles.strip()
     )
     if not distance_miles and not geo_errors:
-        geo_errors.append("distance_miles: enter both addresses or the distance")
+        geo_errors.append("Enter where you're moving from and to so we can work out the distance.")
     try:
         intake = Intake(
             name=name, email=email, from_address=from_address.strip(), to_address=to_address.strip(),
@@ -269,6 +274,8 @@ async def plan(
         )
     except (ValidationError, ValueError) as exc:
         errs = exc.errors() if isinstance(exc, ValidationError) else [{"loc": ("form",), "msg": str(exc)}]
+        if geo_errors:  # the address errors already explain the missing ZIPs and distance
+            errs = [e for e in errs if not e.get("loc") or e["loc"][0] not in ("from_zip", "to_zip", "distance_miles")]
         errors = geo_errors + [_readable(e) for e in errs]
         return templates.TemplateResponse(request, "intake.html", _form_context(errors), status_code=422)
 
