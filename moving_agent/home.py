@@ -14,7 +14,7 @@ def commute(origin: str, destination: str, mode: str, client: httpx.Client | Non
     own, client = client is None, client or httpx.Client(timeout=10)
     try:
         response = client.post("https://routes.googleapis.com/directions/v2:computeRoutes", headers={"X-Goog-Api-Key": key, "X-Goog-FieldMask": "routes.duration,routes.distanceMeters"}, json={"origin":{"address":origin},"destination":{"address":destination},"travelMode":mode.upper()})
-        response.raise_for_status(); route = response.json().get("routes", [None])[0]
+        response.raise_for_status(); routes = response.json().get("routes") or []; route = routes[0] if routes else None
         if not route: return _unavailable("Google Routes", "No route was returned for these locations.")
         seconds = float(str(route["duration"]).removesuffix("s"))
         return {"available": True, "minutes": round(seconds / 60), "miles": round(route["distanceMeters"] / 1609.344, 1), "source":"Google Routes", "fetched_at":_now()}
