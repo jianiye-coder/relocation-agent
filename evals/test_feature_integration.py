@@ -1,7 +1,6 @@
-"""Run explicitly after combining feature PRs: pytest evals/test_feature_integration.py.
+"""End-to-end feature integration on recorded fixtures: candidate homes, photos, Warp.
 
-This file is outside default testpaths so the docs/evals PR can target master
-independently. Missing feature modules fail explicitly when this suite is run.
+Runs in CI (see .github/workflows/tests.yml) with no network and no credentials.
 """
 import asyncio
 import json
@@ -42,7 +41,7 @@ def offline(monkeypatch):
 def test_two_homes_with_sourced_commutes(monkeypatch):
     client = httpx.Client(transport=httpx.MockTransport(lambda req: httpx.Response(200, json=fixture("routes/success.json"))))
     real_commute = home.commute
-    monkeypatch.setattr(home, "commute", lambda origin, dest, mode: real_commute(origin, dest, mode, client=client))
+    monkeypatch.setattr(home, "commute", lambda origin, dest, mode, departure=None: real_commute(origin, dest, mode, client=client, departure=departure))
     profile = fixture("intake/la_to_sf.json")
     profile.update(pets="cat", candidate_addresses="1 Main St, San Francisco, CA\n2 Oak St, San Francisco, CA", commute_destination="1 Market St, San Francisco, CA")
     response = TestClient(web.app).post("/plan", data=profile)
