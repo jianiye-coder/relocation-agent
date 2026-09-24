@@ -3,6 +3,14 @@
 Warp's quote endpoint is ``POST /api/v1/ltl/quote``. It requires palletized dry
 freight dimensions, so household volume is converted to 60-cubic-foot standard
 pallets. This adapter only asks for a quote; it never calls Warp's booking API.
+
+Labeling rules:
+- A test key (``wak_test...``) returns mock data, so its quotes are labeled as
+  sample data, never as a price.
+- A production quote is Warp's real price for the shipment we described, but
+  the pallet conversion and whether Warp takes household goods with residential
+  pickup/delivery are our assumptions. Confidence stays well below a firm
+  quote's cap, and the assumptions are written into ``price_basis``.
 """
 
 from __future__ import annotations
@@ -22,6 +30,13 @@ from .base import (
 QUOTE_URL = "https://www.wearewarp.com/api/v1/ltl/quote"
 PALLET_CUFT = 60
 PALLET_DIMENSIONS_IN = (48, 40, 48)
+SANDBOX_KEY_PREFIX = "wak_test"
+PRODUCTION_CONFIDENCE = 0.6
+SANDBOX_CONFIDENCE = 0.2
+ASSUMPTIONS = (
+    f"assumes {PALLET_CUFT} cu ft per standard 48 × 40 × 48 in pallet; "
+    "Warp has not confirmed household goods or residential pickup/delivery"
+)
 
 
 class WarpLTLAdapter(QuoteAdapter):
@@ -95,22 +110,30 @@ class WarpLTLAdapter(QuoteAdapter):
 
         transit_days = data.get("transit_days")
         transit_note = f"; estimated transit {transit_days} day(s)" if isinstance(transit_days, int | float) else ""
+        shipment = f"{pallets} pallet(s), {payload['weight_lbs_per_pallet']} lb/pallet{transit_note}"
+        if key.startswith(SANDBOX_KEY_PREFIX):
+            title = f"Warp sandbox quote {quote_id} (mock data)"
+            kind, confidence = PriceKind.sample, SANDBOX_CONFIDENCE
+            basis = f"Warp sandbox (test key): mock data, not a real price. {shipment}; {ASSUMPTIONS}"
+            source = f"{QUOTE_URL} (sandbox)"
+        else:
+            title = f"Warp LTL quote {quote_id}"
+            kind, confidence = PriceKind.firm_quote, PRODUCTION_CONFIDENCE
+            basis = f"Warp LTL quote {quote_id} for {shipment}; {ASSUMPTIONS}"
+            source = QUOTE_URL
         return [Quote(
             adapter_id=self.metadata.id,
             provider="Warp",
             service_type=ServiceType.ltl_freight,
-            title=f"Warp LTL quote {quote_id}",
+            title=title,
             price_usd=price,
             available_on=pickup,
             valid_until=expires_at,
-            source=QUOTE_URL,
+            source=source,
             fetched_at=now(),
-            confidence=0.95,
-            price_kind=PriceKind.firm_quote,
-            price_basis=(
-                f"Live Warp LTL API quote {quote_id}: {pallets} pallet(s), "
-                f"{payload['weight_lbs_per_pallet']} lb/pallet, 48 × 40 × 48 in{transit_note}"
-            ),
+            confidence=confidence,
+            price_kind=kind,
+            price_basis=basis,
         )]
 
 
