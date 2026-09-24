@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 from pydantic_ai.usage import UsageLimits
 
-from .. import geo, home
+from .. import geo, home, photo_inventory
 from ..agent import AgentDeps, build_model, fill_derived, model_configured, moving_agent, pick_model, run_without_llm, trace
 from ..models import HomeSize, Intake
 from ..adapters import QuoteCache, RegistrySource, default_registry
@@ -152,6 +152,28 @@ def _fill_from_addresses(from_address: str, to_address: str, from_zip: str, to_z
         except Exception as exc:
             errors.append(f"distance_miles: {exc}")
     return from_zip, to_zip, distance, errors
+
+
+@app.post("/api/inventory/photos")
+async def inventory_photos(request: Request):
+    # Multipart files may spool to temporary storage; the context closes and
+    # removes them on success and on errors. Filenames are never used as paths.
+    async with request.form(max_files=10, max_fields=0) as form:
+        uploads = form.getlist("photos")
+        from starlette.datastructures import UploadFile
+        if not 1 <= len(uploads) <= 10 or any(not isinstance(f, UploadFile) for f in uploads):
+            raise HTTPException(422, "Upload 1 to 10 images.")
+        images = []
+        for upload in uploads:
+            data = await upload.read(photo_inventory.MAX_IMAGE_BYTES + 1)
+            if len(data) > photo_inventory.MAX_IMAGE_BYTES:
+                raise HTTPException(422, "Each image must be 8 MB or smaller.")
+            images.append((upload.filename or "photo", upload.content_type or "", data))
+        try:
+            result = await photo_inventory.analyze(images, pick_model())
+        except photo_inventory.PhotoInventoryError as exc:
+            raise HTTPException(422, str(exc)) from exc
+    return result.model_dump()
 
 
 # ---- running the agent ----
