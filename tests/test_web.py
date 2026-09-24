@@ -26,49 +26,70 @@ def test_email_delivery_routes_are_not_registered():
         assert client.post(path).status_code == 404
 
 
-def test_candidate_home_intake_survives_the_plan_session(intake, monkeypatch):
+def test_candidate_home_controls_live_in_housing_not_intake(intake, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    response = TestClient(web.app).post("/plan", data=form(
-        intake,
-        candidate_addresses="1 Main St, San Francisco, CA\n2 Oak St, San Francisco, CA",
-        commute_destination="1 Market St, San Francisco, CA",
-        commute_mode="transit",
-        commute_departure_time="08:30",
-    ))
+    client = TestClient(web.app)
+    intake_page = client.get("/").text
+    assert "Candidate homes" not in intake_page and "commute_destination" not in intake_page
+    response = client.post("/plan", data=form(intake))
     import re
     rid = re.search(r"/plan/(\w+)", str(response.url)).group(1)
-    saved = web.SESSIONS[rid].intake
-    assert saved.candidate_addresses == ["1 Main St, San Francisco, CA", "2 Oak St, San Francisco, CA"]
-    assert saved.commute_destination == "1 Market St, San Francisco, CA"
-    assert saved.commute_mode == "transit" and saved.commute_departure_time == "08:30"
+    housing_page = client.get(f"/housing?rid={rid}").text
+    assert "Compare commute" in housing_page and "Add to my move plan" not in housing_page
 
 
-@pytest.mark.parametrize("field,value,message", [
-    ("candidate_addresses", "1 Main St\n2 Oak St\n3 Pine St", "Add at most two candidate homes"),
-    ("commute_mode", "teleport", "Choose drive, transit, walk or bicycle"),
-    ("commute_departure_time", "8:30am", "Use a 24-hour time like 08:30"),
-    ("commute_departure_time", "25:00", "Use a 24-hour time like 08:30"),
-])
-def test_candidate_home_input_errors_are_readable(intake, field, value, message):
-    response = TestClient(web.app).post("/plan", data=form(intake, **{field: value}))
-    assert response.status_code == 422
-    assert message in response.text
-    assert "List should have at most" not in response.text  # no raw validator text
-    assert "String should match pattern" not in response.text
-
-
-def test_two_candidate_homes_and_blank_lines_are_fine(intake):
-    response = TestClient(web.app).post("/plan", data=form(intake, candidate_addresses="\n1 Main St\n\n2 Oak St\n"))
-    assert response.status_code == 200
-
-
-def test_candidate_home_card_shows_schools_row_and_checked_time(intake, monkeypatch):
+def test_selecting_housing_result_adds_candidate_and_commute_data(intake, monkeypatch):
     from moving_agent import home
     monkeypatch.setattr(home, "commute", lambda *a, **k: {"available": True, "minutes": 25, "miles": 5.0, "source": "Google Routes",
                                                          "fetched_at": "2026-09-23T20:00:00+00:00", "departure": "2026-10-14T08:30:00-07:00"})
-    response = TestClient(web.app).post("/plan", data=form(
-        intake, candidate_addresses="1 Main St, San Francisco, CA", commute_destination="1 Market St, San Francisco, CA",
-        commute_mode="transit", commute_departure_time="08:30"))
+    client = TestClient(web.app)
+    response = client.post("/plan", data=form(intake))
+    import re
+    rid = re.search(r"/plan/(\w+)", str(response.url)).group(1)
+    response = client.post(f"/housing/{rid}/select", data={"address": "1 Main St, San Francisco, CA", "commute_destination": "1 Market St, San Francisco, CA", "commute_mode": "transit", "commute_departure_time": "08:30"})
     assert response.status_code == 200
-    for text in ["Schools:", "No verified school data source", "checked Sep 23", "leaving 8:30"]:
+    saved = web.SESSIONS[rid].intake
+    assert saved.candidate_addresses == ["1 Main St, San Francisco, CA"]
+    assert saved.commute_destination == "1 Market St, San Francisco, CA" and saved.commute_mode == "transit"
+    for text in ["Home added to your plan", "Homes you’re comparing", "Schools:", "No verified school data source", "checked Sep 23", "leaving 8:30"]:
         assert text in response.text, text
+
+
+def test_housing_selection_stops_at_two_homes(intake):
+    client = TestClient(web.app)
+    response = client.post("/plan", data=form(intake))
+    import re
+    rid = re.search(r"/plan/(\w+)", str(response.url)).group(1)
+    for address in ["1 Main St, San Francisco, CA", "2 Oak St, San Francisco, CA"]:
+        client.post(f"/housing/{rid}/select", data={"address": address})
+    response = client.post(f"/housing/{rid}/select", data={"address": "3 Pine St, San Francisco, CA"})
+    assert response.status_code == 422 and "already has two" in response.text
+
+
+def test_housing_page_explains_how_to_enable_live_listings():
+    response = TestClient(web.app).get("/housing?zip_code=94110")
+    assert response.status_code == 200
+    assert "Set SIMPLYRETS_API_KEY" in response.text
+    assert "sample catalog" in response.text
+
+
+def test_housing_page_renders_real_listing_fields(monkeypatch):
+    monkeypatch.setattr(web.home, "rental_listings", lambda **filters: {
+        "available": True, "source": "SimplyRETS / MLS", "fetched_at": "2026-09-23T20:00:00+00:00",
+        "listings": [{"id": "a", "address": "123 Valencia St, San Francisco, CA 94110", "rent": 2895,
+                      "bedrooms": 1, "bathrooms": 1, "square_feet": 610, "property_type": "Condo",
+                      "listed_date": "2026-09-20T00:00:00.000Z", "last_seen_date": "", "days_on_market": 3, "status": "Active",
+                      "photos": ["https://images.example/home.jpg", "https://images.example/home-2.jpg"], "disclaimer": "MLS data"}],
+    })
+    response = TestClient(web.app).get("/housing?zip_code=94110&min_rent=2500&max_rent=3000&bedrooms=1")
+    assert response.status_code == 200
+    for text in ["123 Valencia St", "$2,895", "610 sq ft", "checked Sep 23", "3 days on market", "View all 2 MLS photos", "MLS data"]:
+        assert text in response.text
+    assert 'src="https://images.example/home.jpg"' in response.text
+
+
+def test_housing_page_has_specific_filter_errors():
+    response = TestClient(web.app).get("/housing?zip_code=94110&min_rent=3000&max_rent=2000&bedrooms=one")
+    assert response.status_code == 200
+    assert "Minimum rent cannot be higher" in response.text
+    assert "Enter a whole number for bedrooms" in response.text
