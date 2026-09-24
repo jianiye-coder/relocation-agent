@@ -89,7 +89,7 @@ def rental_listings(location: str, min_rent: int | None = None, max_rent: int | 
                     scraper: Callable[..., list[Any]] | None = None) -> dict:
     """Return current Realtor.com rentals through HomeHarvest.
 
-    HomeHarvest is an unofficial scraper, not an MLS feed. Its live data can
+    HomeHarvest is an unofficial scraper of Realtor.com. Its live data can
     change or become unavailable without notice, so callers must show its
     source and never substitute sample homes.
     """
@@ -123,7 +123,7 @@ def rental_listings(location: str, min_rent: int | None = None, max_rent: int | 
             if not formatted_address:
                 continue
             listings.append({
-                "id": _field(item, "listing_id") or _field(item, "mls_id") or _field(item, "property_id", ""),
+                "id": _field(item, "listing_id") or _field(item, "property_id", ""),
                 "address": formatted_address, "rent": _field(item, "list_price"),
                 "bedrooms": _field(description, "beds"), "bathrooms": _field(description, "baths_full"),
                 "square_feet": _field(description, "sqft"),
