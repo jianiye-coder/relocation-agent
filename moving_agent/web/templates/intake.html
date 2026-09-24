@@ -18,6 +18,16 @@
   </section>
 
   <section class="block">
+    <h2>Candidate homes <span class="hint" style="font-size:14px;font-weight:400">· optional</span></h2>
+    <div class="field"><label for="candidate_addresses">Homes to compare <span class="hint">· up to 2 addresses, one per line</span></label><textarea id="candidate_addresses" name="candidate_addresses" rows="3" placeholder="1 Main St, San Francisco, CA&#10;2 Oak St, San Francisco, CA"></textarea></div>
+    <div class="field"><label for="commute_destination">Work or school destination</label><input id="commute_destination" name="commute_destination" placeholder="Address, city, state"></div>
+    <div class="row">
+      <div class="field"><label for="commute_mode">Commute mode</label><select id="commute_mode" name="commute_mode"><option value="drive">Drive</option><option value="transit">Transit</option><option value="walk">Walk</option><option value="bicycle">Bicycle</option></select></div>
+      <div class="field"><label for="commute_departure_time">Leave at <span class="hint">· optional</span></label><input id="commute_departure_time" name="commute_departure_time" type="time"></div>
+    </div>
+  </section>
+
+  <section class="block">
     <h2>Where and when</h2>
     <div class="field">
       <label for="from_address">Moving from</label>
