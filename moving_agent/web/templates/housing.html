@@ -2,7 +2,7 @@
 {% block title %}Find a home · Relocation agent{% endblock %}
 {% block content %}
 <h1>Find a home</h1>
-<p class="lead">Search active rental listings with MLS-provided photos. Results never come from our sample catalog.</p>
+<p class="lead">Search active rentals with photos from Realtor.com. Results never come from our sample catalog.</p>
 
 <form class="housing-search" method="get" action="/housing" role="search" aria-label="Search rental listings">
   {% if rid %}<input type="hidden" name="rid" value="{{ rid }}">{% endif %}
@@ -33,7 +33,7 @@
         {% for home in results.listings %}
           <article class="home-card{% if home.photos %} has-photo{% endif %}">
             {% if home.photos %}
-            <div class="home-media"><img src="{{ home.photos[0] }}" alt="MLS photo of {{ home.address }}" loading="lazy">{% if home.photos|length > 1 %}<span class="photo-count">{{ home.photos|length }} photos</span>{% endif %}</div>
+            <div class="home-media"><img src="{{ home.photos[0] }}" alt="Photo of {{ home.address }}" loading="lazy" width="640" height="480">{% if home.photos|length > 1 %}<span class="photo-count">{{ home.photos|length }} photos</span>{% endif %}</div>
             {% endif %}
             <div class="home-main"><h3>{{ home.address }}</h3><p class="muted">{{ home.property_type or "Rental home" }}{% if home.bedrooms is not none %} · {{ "Studio" if home.bedrooms == 0 else home.bedrooms ~ " bed" }}{% endif %}{% if home.bathrooms is not none %} · {{ home.bathrooms }} bath{% endif %}{% if home.square_feet %} · {{ "{:,}".format(home.square_feet) }} sq ft{% endif %}</p></div>
             <p class="home-rent">{% if home.rent is not none %}${{ "{:,}".format(home.rent) }}<span>/mo</span>{% else %}Rent unavailable{% endif %}</p>
@@ -44,7 +44,7 @@
                 {% if home.address in saved_addresses %}<button class="btn btn-secondary btn-sm" type="button" disabled>Added to your plan</button>{% elif saved_addresses|length >= 2 %}<button class="btn btn-secondary btn-sm" type="button" disabled>Your plan has 2 homes</button>{% else %}<button class="btn btn-secondary btn-sm" type="submit">Add to my move plan</button>{% endif %}
               </form>
             {% endif %}
-            {% if home.photos|length > 1 %}<details class="home-gallery"><summary>View all {{ home.photos|length }} MLS photos</summary><div>{% for photo in home.photos[1:] %}<img src="{{ photo }}" alt="Additional MLS photo of {{ home.address }}" loading="lazy">{% endfor %}</div></details>{% elif not home.photos %}<p class="muted home-no-photo">No MLS photo was supplied for this listing.</p>{% endif %}
+            {% if home.photos|length > 1 %}<details class="home-gallery"><summary>View all {{ home.photos|length }} photos</summary><div>{% for photo in home.photos[1:] %}<img src="{{ photo }}" alt="Additional photo of {{ home.address }}" loading="lazy" width="320" height="240">{% endfor %}</div></details>{% elif not home.photos %}<p class="muted home-no-photo">No photo was found for this listing.</p>{% endif %}
             {% if home.disclaimer %}<p class="muted home-disclaimer">{{ home.disclaimer }}</p>{% endif %}
           </article>
         {% endfor %}

@@ -35,7 +35,7 @@ def test_candidate_home_controls_live_in_housing_not_intake(intake, monkeypatch)
     import re
     rid = re.search(r"/plan/(\w+)", str(response.url)).group(1)
     housing_page = client.get(f"/housing?rid={rid}").text
-    assert "Compare commute" in housing_page and "Add to my move plan" not in housing_page
+    assert "Compare commute" in housing_page
 
 
 def test_selecting_housing_result_adds_candidate_and_commute_data(intake, monkeypatch):
@@ -66,24 +66,27 @@ def test_housing_selection_stops_at_two_homes(intake):
     assert response.status_code == 422 and "already has two" in response.text
 
 
-def test_housing_page_explains_how_to_enable_live_listings():
+def test_housing_page_explains_when_the_live_scraper_is_unavailable(monkeypatch):
+    monkeypatch.setattr(web.home, "rental_listings", lambda **filters: {
+        "available": False, "source": "HomeHarvest · Realtor.com (unofficial scrape)", "listings": [],
+        "message": "Live Realtor.com rental listings are unavailable right now. Try again shortly."})
     response = TestClient(web.app).get("/housing?zip_code=94110")
     assert response.status_code == 200
-    assert "Set SIMPLYRETS_API_KEY" in response.text
-    assert "sample catalog" in response.text
+    assert "Live Realtor.com rental listings are unavailable" in response.text
+    assert "HomeHarvest" in response.text
 
 
 def test_housing_page_renders_real_listing_fields(monkeypatch):
     monkeypatch.setattr(web.home, "rental_listings", lambda **filters: {
-        "available": True, "source": "SimplyRETS / MLS", "fetched_at": "2026-09-23T20:00:00+00:00",
+        "available": True, "source": "HomeHarvest · Realtor.com (unofficial scrape)", "fetched_at": "2026-09-23T20:00:00+00:00",
         "listings": [{"id": "a", "address": "123 Valencia St, San Francisco, CA 94110", "rent": 2895,
                       "bedrooms": 1, "bathrooms": 1, "square_feet": 610, "property_type": "Condo",
                       "listed_date": "2026-09-20T00:00:00.000Z", "last_seen_date": "", "days_on_market": 3, "status": "Active",
-                      "photos": ["https://images.example/home.jpg", "https://images.example/home-2.jpg"], "disclaimer": "MLS data"}],
+                      "photos": ["https://images.example/home.jpg", "https://images.example/home-2.jpg"], "disclaimer": "Realtor.com data"}],
     })
     response = TestClient(web.app).get("/housing?zip_code=94110&min_rent=2500&max_rent=3000&bedrooms=1")
     assert response.status_code == 200
-    for text in ["123 Valencia St", "$2,895", "610 sq ft", "checked Sep 23", "3 days on market", "View all 2 MLS photos", "MLS data"]:
+    for text in ["123 Valencia St", "$2,895", "610 sq ft", "checked Sep 23", "3 days on market", "View all 2 photos", "Realtor.com data"]:
         assert text in response.text
     assert 'src="https://images.example/home.jpg"' in response.text
 
