@@ -95,7 +95,7 @@ def option_views(plans: list[Plan], budget: int, requested_date: date) -> list[d
                 "service": o.service,
                 "service_label": _service(o),
                 "provider": o.provider,
-                "provider_url": o.contact_url,
+                "provider_url": o.contact_url or (o.source if o.source.startswith("http") else None),
                 "title": o.title,
                 "price": f"${o.price_usd:,.2f}",
                 "rating": o.rating,
