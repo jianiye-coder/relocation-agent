@@ -97,8 +97,14 @@ def _readable(error: dict) -> str:
     return FIELD_MESSAGES.get(field) or f"{'.'.join(str(p) for p in error['loc'])}: {error['msg']}"
 
 
+def voice_intake_enabled() -> bool:
+    """Voice intake is hidden for the MVP; ENABLE_VOICE_INTAKE=1 turns it back on."""
+    return os.getenv("ENABLE_VOICE_INTAKE", "").strip().lower() in {"1", "true", "yes"}
+
+
 def _form_context(errors: list[str]) -> dict:
-    return {"home_sizes": [h.value for h in HomeSize], "errors": errors, "today": date.today().isoformat()}
+    return {"home_sizes": [h.value for h in HomeSize], "errors": errors, "today": date.today().isoformat(),
+            "voice_intake": voice_intake_enabled()}
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -115,6 +121,8 @@ class VoiceAutofillRequest(BaseModel):
 @app.post("/api/intake/voice-autofill")
 async def voice_autofill(payload: VoiceAutofillRequest):
     """Return user-reviewable form values extracted from a browser voice transcript."""
+    if not voice_intake_enabled():
+        raise HTTPException(404, "Voice intake is turned off.")
     try:
         fields = await voice_intake.extract(payload.transcript, pick_model())
     except voice_intake.VoiceIntakeError as exc:

@@ -4,6 +4,7 @@
 <h1>Plan your move</h1>
 <p class="lead">Tell us about your move. We'll compare truck, movers and storage options that fit your dates and budget.</p>
 
+{% if voice_intake %}
 <section class="voice-intake" aria-labelledby="voice-intake-title">
   <h2 id="voice-intake-title">Tell us about your move</h2>
   <p class="muted">Speak naturally, then review the transcript and the fields we fill. Nothing is submitted until you choose Find my options.</p>
@@ -11,6 +12,7 @@
   <div class="voice-transcript"><label for="voice_transcript">Voice transcript <span class="hint">· edit before filling</span></label><textarea id="voice_transcript" rows="4" placeholder="For example: I’m moving from Chicago to San Francisco on October 15 with a one-bedroom apartment, a cat, and a $5,000 budget."></textarea></div>
   <p id="voice_status" class="muted voice-status" role="status" aria-live="polite"></p>
 </section>
+{% endif %}
 
 {% if errors %}
 <div class="errors" role="alert"><strong>Please fix:</strong><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>
@@ -146,6 +148,7 @@
   <div class="actions"><button class="btn btn-primary" type="submit">Find my options</button></div>
 </form>
 
+{% if voice_intake %}
 <script>
 // Browser speech recognition creates a reviewable local transcript. Only when
 // the user explicitly chooses Fill my details is that transcript sent for field extraction.
@@ -219,6 +222,7 @@
   });
 })();
 </script>
+{% endif %}
 <script>
 // Look up each address when the user leaves the field, fill in its ZIP,
 // then calculate the driving distance once both are known.
