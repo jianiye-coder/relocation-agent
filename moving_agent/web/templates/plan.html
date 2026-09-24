@@ -119,7 +119,7 @@
   {% endfor %}
 </section>
 {% endif %}
-<p class="muted">Sample prices are illustrative until live provider adapters are connected.
+<p class="muted">{{ price_notes|join(" ") }}
 {% for e in adapter_errors %}<br>{{ e.adapter_id }}: {{ e.error.value }}{% if e.message %} ({{ e.message }}){% endif %}{% endfor %}</p>
 {% endif %}
 
