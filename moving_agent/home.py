@@ -129,6 +129,7 @@ def rental_listings(zip_code: str, min_rent: int | None = None, max_rent: int | 
                 "property_type": _display_value(_field(description, "style") or _field(description, "type")),
                 "listed_date": _as_iso(_field(item, "list_date")), "last_seen_date": _as_iso(_field(item, "last_update_date")),
                 "days_on_market": _field(item, "days_on_mls"), "status": _field(item, "status"),
+                "latitude": _field(item, "latitude"), "longitude": _field(item, "longitude"),
                 "photos": _listing_photos(item), "disclaimer": "Data supplied by Realtor.com via HomeHarvest; availability and details can change.",
             })
         return {"available": True, "source": HOMEHARVEST_SOURCE, "fetched_at": _now(), "listings": listings}

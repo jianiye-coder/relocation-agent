@@ -113,6 +113,7 @@ def test_rental_listings_normalize_homeharvest_response():
                                    "rent": 2895, "bedrooms": 1, "bathrooms": 1, "square_feet": 610,
                                    "property_type": "Condo", "listed_date": "2026-09-20T00:00:00.000Z",
                                    "last_seen_date": "2026-09-23T12:00:00.000Z", "days_on_market": 3, "status": "for_rent",
+                                   "latitude": None, "longitude": None,
                                    "photos": ["https://images.example/listing-1.jpg", "https://images.example/listing-2.jpg"],
                                    "disclaimer": "Data supplied by Realtor.com via HomeHarvest; availability and details can change."}]
     assert captured == {"location": "94110", "listing_type": "for_rent", "return_type": "pydantic",

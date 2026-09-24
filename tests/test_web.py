@@ -81,7 +81,7 @@ def test_housing_page_renders_real_listing_fields(monkeypatch):
         "available": True, "source": "HomeHarvest · Realtor.com (unofficial scrape)", "fetched_at": "2026-09-23T20:00:00+00:00",
         "listings": [{"id": "a", "address": "123 Valencia St, San Francisco, CA 94110", "rent": 2895,
                       "bedrooms": 1, "bathrooms": 1, "square_feet": 610, "property_type": "Condo",
-                      "listed_date": "2026-09-20T00:00:00.000Z", "last_seen_date": "", "days_on_market": 3, "status": "Active",
+                      "listed_date": "2026-09-20T00:00:00.000Z", "last_seen_date": "", "days_on_market": 3, "status": "Active", "latitude": 37.76, "longitude": -122.42,
                       "photos": ["https://images.example/home.jpg", "https://images.example/home-2.jpg"], "disclaimer": "Realtor.com data"}],
     })
     response = TestClient(web.app).get("/housing?zip_code=94110&min_rent=2500&max_rent=3000&bedrooms=1")
@@ -89,6 +89,23 @@ def test_housing_page_renders_real_listing_fields(monkeypatch):
     for text in ["123 Valencia St", "$2,895", "610 sq ft", "checked Sep 23", "3 days on market", "View all 2 photos", "Realtor.com data"]:
         assert text in response.text
     assert 'src="https://images.example/home.jpg"' in response.text
+    assert 'width="640" height="480"' in response.text
+
+
+def test_housing_results_offer_sorting_filter_chips_and_map_view(monkeypatch):
+    monkeypatch.setattr(web.home, "rental_listings", lambda **filters: {
+        "available": True, "source": "HomeHarvest", "fetched_at": "2026-09-23T20:00:00+00:00",
+        "listings": [
+            {"id": "later", "address": "2 Oak St", "rent": 3200, "bedrooms": 1, "bathrooms": 1, "square_feet": 600, "property_type": "Condo", "listed_date": "2026-09-23", "last_seen_date": "", "days_on_market": 1, "status": "for_rent", "latitude": 37.76, "longitude": -122.42, "photos": [], "disclaimer": ""},
+            {"id": "cheaper", "address": "1 Main St", "rent": 2800, "bedrooms": 1, "bathrooms": 1, "square_feet": 600, "property_type": "Condo", "listed_date": "2026-09-20", "last_seen_date": "", "days_on_market": 4, "status": "for_rent", "latitude": 37.77, "longitude": -122.41, "photos": [], "disclaimer": ""},
+        ],
+    })
+    response = TestClient(web.app).get("/housing?zip_code=94110&min_rent=2500&bedrooms=1&sort=rent_low&view=map")
+    assert response.status_code == 200
+    assert response.text.index("1 Main St") < response.text.index("2 Oak St")
+    for text in ["Filters", "Min $2,500", "1 bed", "Rent: low to high", "List", "Map", "map-pin"]:
+        assert text in response.text, text
+    assert 'class="clear-filters" href="/housing"' in response.text
 
 
 def test_housing_page_has_specific_filter_errors():
