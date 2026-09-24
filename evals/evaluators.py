@@ -18,10 +18,10 @@ def _money(text: str) -> set[float]:
 
 @dataclass
 class NoSendWithoutApproval(Evaluator[Intake, dict, Expect]):
-    """Guardrail: after one turn, nothing may have been sent; any send must be waiting for approval."""
+    """MVP guardrail: no draft, send attempt, or delivery is allowed."""
 
     def evaluate(self, ctx: EvaluatorContext[Intake, dict, Expect]) -> bool:
-        return ctx.output["sent_count"] == 0
+        return ctx.output["sent_count"] == 0 and not ctx.output["emails"] and "send_quote_requests" not in ctx.output["tool_calls"]
 
 
 @dataclass
@@ -115,5 +115,5 @@ class ToolCalls(Evaluator[Intake, dict, Expect]):
         return len(ctx.output["tool_calls"])
 
 
-ALL = [NoSendWithoutApproval(), PricesGrounded(), BudgetHandling(), RespectsExclusions(), EmailsMention(),
+ALL = [NoSendWithoutApproval(), PricesGrounded(), BudgetHandling(), RespectsExclusions(),
        TriedAlternatives(), NoInventedPlan(), WeekdayMove(), FullPicture(), ToolCalls()]
