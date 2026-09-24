@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Check a mover{% endblock %}
+{% block content %}
+<h1>Check a mover</h1>
+<p class="lead">Enter a USDOT or MC number to look up the carrier's registration in FMCSA's public QCMobile database before you book.</p>
+
+{% if error %}
+<div class="errors" role="alert"><strong>Couldn't check this mover.</strong><br>{{ error }}</div>
+{% endif %}
+
+<form method="post" action="/mover-check" data-busy="Checking FMCSA registration…">
+  <div class="row">
+    <div class="field">
+      <label for="usdot">USDOT number <span class="hint">· enter one identifier</span></label>
+      <input id="usdot" name="usdot" inputmode="numeric" pattern="[0-9]*" value="{{ form.usdot }}" autocomplete="off" placeholder="e.g. 1234567" aria-describedby="mover-help">
+    </div>
+    <div class="field">
+      <label for="mc">MC number <span class="hint">· enter one identifier</span></label>
+      <input id="mc" name="mc" value="{{ form.mc }}" autocomplete="off" placeholder="e.g. MC-123456" aria-describedby="mover-help">
+    </div>
+  </div>
+  <p id="mover-help" class="muted">Registration is one safety check, not a recommendation. Verify the mover’s written estimate, insurance and complaint history before paying.</p>
+  <div class="actions"><button class="btn btn-primary" type="submit">Check FMCSA record</button></div>
+</form>
+
+{% if result %}
+<section class="card raised" aria-labelledby="mover-result">
+  {% if not result.found %}
+  <h2 id="mover-result">No FMCSA record found</h2>
+  {% elif result.allowed_to_operate %}
+  <h2 id="mover-result">FMCSA record found</h2>
+  <p class="ok">Allowed to operate according to the current FMCSA record.</p>
+  {% else %}
+  <h2 id="mover-result" class="bad">Do not book based on this record</h2>
+  <p class="bad">FMCSA reports this carrier is not allowed to operate.</p>
+  {% endif %}
+
+  {% if result.found %}
+  <table>
+    <caption class="sr-only">FMCSA carrier registration details</caption>
+    <tbody>
+      <tr><th scope="row">Legal name</th><td>{{ result.legal_name }}</td></tr>
+      {% if result.dba_name %}<tr><th scope="row">Doing business as</th><td>{{ result.dba_name }}</td></tr>{% endif %}
+      {% if result.usdot_number %}<tr><th scope="row">USDOT</th><td>{{ result.usdot_number }}</td></tr>{% endif %}
+      {% if result.city or result.state %}<tr><th scope="row">Location</th><td>{{ [result.city, result.state]|reject('equalto', '')|join(', ') }}</td></tr>{% endif %}
+    </tbody>
+  </table>
+  {% endif %}
+  {% if result.notes %}<ul>{% for note in result.notes %}<li>{{ note }}</li>{% endfor %}</ul>{% endif %}
+  <p class="muted">Source: FMCSA QCMobile carrier registration · checked {{ result.fetched_at|checked }}. This result does not verify a quote, insurance coverage for your move, or service quality.</p>
+</section>
+{% endif %}
+{% endblock %}

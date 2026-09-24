@@ -26,6 +26,38 @@ def test_email_delivery_routes_are_not_registered():
         assert client.post(path).status_code == 404
 
 
+def test_mover_check_shows_an_fmcsa_carrier_record(monkeypatch):
+    from datetime import datetime, timezone
+    from moving_agent.adapters.base import CarrierCheck
+
+    async def fake_check(self, usdot=None, mc=None):
+        assert usdot == 1234567 and mc is None
+        return CarrierCheck(adapter_id="fmcsa_qcmobile", query="USDOT 1234567", found=True, usdot_number=1234567,
+                            legal_name="EXAMPLE VAN LINES LLC", dba_name="Example Movers", allowed_to_operate=True,
+                            city="Chicago", state="IL", source="FMCSA", fetched_at=datetime.now(timezone.utc))
+
+    monkeypatch.setattr(web.FMCSAAdapter, "check", fake_check)
+    client = TestClient(web.app)
+    response = client.post("/mover-check", data={"usdot": "1234567"})
+    assert response.status_code == 200
+    for text in ["FMCSA record found", "Allowed to operate", "EXAMPLE VAN LINES LLC", "Example Movers", "1234567", "Chicago, IL"]:
+        assert text in response.text
+
+
+def test_mover_check_requires_exactly_one_identifier():
+    client = TestClient(web.app)
+    assert client.get("/mover-check").status_code == 200
+    response = client.post("/mover-check", data={"usdot": "123", "mc": "MC-456"})
+    assert response.status_code == 422 and "either a USDOT number or an MC number" in response.text
+
+
+def test_mover_check_explains_missing_fmcsa_key(monkeypatch):
+    monkeypatch.delenv("FMCSA_WEB_KEY", raising=False)
+    response = TestClient(web.app).post("/mover-check", data={"mc": "MC-123456"})
+    assert response.status_code == 502
+    assert "Add FMCSA_WEB_KEY to .env" in response.text
+
+
 def test_candidate_home_intake_survives_the_plan_session(intake, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     response = TestClient(web.app).post("/plan", data=form(

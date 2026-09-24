@@ -19,7 +19,7 @@ from pydantic_ai.usage import UsageLimits
 from .. import geo, home, photo_inventory
 from ..agent import AgentDeps, build_model, fill_derived, model_configured, moving_agent, pick_model, run_without_llm, trace
 from ..models import HomeSize, Intake
-from ..adapters import QuoteCache, RegistrySource, default_registry
+from ..adapters import AdapterError, ErrorCode, FMCSAAdapter, QuoteCache, RegistrySource, default_registry
 from ..inventory import estimate as estimate_inventory
 from ..listings import check as check_listing_rules
 
@@ -330,3 +330,48 @@ def listing_check(request: Request, text: str = Form(...), price_usd: str = Form
                                  int(bedrooms) if bedrooms.strip() else None, address)
     return templates.TemplateResponse(request, "listing_check.html", {
         "result": result, "form": {"text": text, "price_usd": price_usd, "bedrooms": bedrooms, "address": address}})
+
+
+# ---- mover vetting ----
+
+def _mover_check_context(*, result=None, error: str = "", usdot: str = "", mc: str = "") -> dict:
+    return {"result": result, "error": error, "form": {"usdot": usdot, "mc": mc}}
+
+
+@app.get("/mover-check", response_class=HTMLResponse)
+def mover_check_form(request: Request):
+    return templates.TemplateResponse(request, "mover_check.html", _mover_check_context())
+
+
+@app.post("/mover-check", response_class=HTMLResponse)
+async def mover_check(request: Request, usdot: str = Form(""), mc: str = Form("")):
+    """Look up one carrier identifier in FMCSA's QCMobile registry."""
+    usdot, mc = usdot.strip(), mc.strip()
+    if bool(usdot) == bool(mc):
+        return templates.TemplateResponse(
+            request, "mover_check.html",
+            _mover_check_context(error="Enter either a USDOT number or an MC number — not both.", usdot=usdot, mc=mc),
+            status_code=422,
+        )
+    if usdot and not usdot.isdigit():
+        return templates.TemplateResponse(
+            request, "mover_check.html",
+            _mover_check_context(error="USDOT numbers contain digits only.", usdot=usdot, mc=mc), status_code=422,
+        )
+    if mc and not any(char.isdigit() for char in mc):
+        return templates.TemplateResponse(
+            request, "mover_check.html",
+            _mover_check_context(error="Enter the digits from the MC number, for example MC-123456.", usdot=usdot, mc=mc), status_code=422,
+        )
+    try:
+        result = await FMCSAAdapter().check(usdot=int(usdot) if usdot else None, mc=mc or None)
+    except AdapterError as exc:
+        message = (
+            "Add FMCSA_WEB_KEY to .env before checking live records."
+            if exc.code == ErrorCode.auth_missing else exc.message
+        )
+        return templates.TemplateResponse(
+            request, "mover_check.html",
+            _mover_check_context(error=f"FMCSA lookup unavailable: {message}", usdot=usdot, mc=mc), status_code=502,
+        )
+    return templates.TemplateResponse(request, "mover_check.html", _mover_check_context(result=result, usdot=usdot, mc=mc))
