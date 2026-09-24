@@ -79,4 +79,5 @@ Subclass `QuoteAdapter` in `moving_agent/adapters/`, fill `AdapterMetadata`, ret
 - Real Gmail send not yet run: needs a Google Cloud OAuth client (Web application) with redirect URI `http://localhost:8787/auth/google/callback` (see README).
 - The agent runs on `flatkey:claude-sonnet-5` (verified 2026-09-23: plan, what-if, chat, approval, send). A turn takes about 5-30 s; there is no loading indicator yet.
 - Provider search (Tavily / Google Places) not wired in yet; see README.
-- Room photo scan, housing listings adapter, neighborhood fit (crime, schools), utilities lookup, orchestrator + per-area agents and the browser layer are in the PRD but not in code yet.
+- Hidden in the MVP behind `.env` flags (see PRD "Hidden in the MVP"): room photo scan (`ENABLE_PHOTO_INVENTORY`, planned to become photo → Facebook Marketplace listing) and voice intake (`ENABLE_VOICE_INTAKE`).
+- Housing listings adapter, neighborhood fit (crime, schools), utilities lookup, orchestrator + per-area agents and the browser layer are in the PRD but not in code yet.

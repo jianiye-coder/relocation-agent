@@ -100,6 +100,7 @@
       <label for="inventory_text">What you're moving <span class="hint">· rooms or items, one per line (optional, better than home size)</span></label>
       <textarea id="inventory_text" name="inventory_text" rows="4" placeholder="2 bedrooms&#10;living room&#10;kitchen&#10;upright piano&#10;boxes x 20"></textarea>
     </div>
+    {% if photo_inventory %}
     <div class="field">
       <label for="inventory_photos">Room photos · optional</label>
       <input id="inventory_photos" type="file" accept="image/jpeg,image/png,image/webp" multiple>
@@ -112,6 +113,7 @@
         <button id="use_photo_items" class="btn btn-secondary" type="button">Use this item list</button>
       </div>
     </div>
+    {% endif %}
   </section>
 
   <section class="block">
@@ -274,6 +276,7 @@
   document.querySelectorAll("[data-geo]").forEach((el) => el.addEventListener("change", () => lookup(el.dataset.geo)));
 })();
 </script>
+{% if photo_inventory %}
 <script>
 (() => {
   const input = document.getElementById("inventory_photos");
@@ -312,4 +315,5 @@
   });
 })();
 </script>
+{% endif %}
 {% endblock %}
