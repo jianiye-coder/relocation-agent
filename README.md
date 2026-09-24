@@ -40,6 +40,7 @@ Set only your preferred LLM key. If several are set, selection priority is Flatk
 | `WARP_MODE` | `sandbox` (default) or `production`; production must be selected explicitly. No booking is called. |
 | `WARP_API_KEY` | Sandbox credential used when `WARP_MODE=sandbox`; `wak_test_` quotes are mock data. |
 | `WARP_PRODUCTION_API_KEY` | Live credential used only when `WARP_MODE=production`; quote assumptions remain labeled. |
+| `ENABLE_UNOFFICIAL_ADAPTERS` | Comma-separated website adapters to turn on: `public_storage`, `uhaul`, `budget_truck`. Off by default. They read the same public pages the providers' own search boxes use (Public Storage city pages; U-Haul and Budget one-way rate searches), never reserve anything, and report a 403 or bot check as `blocked` instead of working around it. Their terms of service have not been reviewed, so keep them for local demos. Once any real price exists for a service, sample prices for that service are dropped. Penske is not included: its rate API sits behind bot protection. |
 | `QUOTE_CACHE=off` | Disable quote cache, useful for isolated verification. |
 
 There is no implemented FCC or NREL/OpenEI address-level adapter. Do not add a `BROADBAND_API_KEY` or assume that an NREL key enables utility lookup. Internet, electricity and schools currently report unavailable on each candidate home (PR #9). Crime scoring is not implemented.

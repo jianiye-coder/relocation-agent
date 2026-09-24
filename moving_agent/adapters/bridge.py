@@ -8,7 +8,7 @@ import threading
 import time
 
 from ..models import Intake, Offer
-from .base import AdapterResult, Quote, ServiceType
+from .base import AdapterResult, PriceKind, Quote, ServiceType
 from .registry import Registry
 from .request import request_from_intake
 
@@ -63,13 +63,16 @@ class RegistrySource:
         return fresh[1]
 
     def offers(self, intake: Intake, service: str) -> list[Offer]:
+        """Offers for one service. Once any real price exists for it, sample prices drop out,
+        so an illustrative rate can't outrank a real one."""
         wanted = SERVICE_TYPES[service]
         out = []
         for r in self.results(intake):
             for i, q in enumerate(r.quotes):
                 if q.service_type in wanted:
                     out.append(to_offer(q, i))
-        return out
+        real = [o for o in out if o.price_kind != PriceKind.sample.value]
+        return real or out
 
     def quotes_of(self, intake: Intake, *types: ServiceType) -> list[Quote]:
         return [q for r in self.results(intake) for q in r.quotes if q.service_type in types]

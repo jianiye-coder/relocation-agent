@@ -11,9 +11,9 @@ import httpx
 import pytest
 
 from moving_agent.adapters import (
-    AdapterError, AdapterMetadata, Capability, ErrorCode, FMCSAAdapter, MoveRequest, PriceKind, Quote, QuoteAdapter,
-    QuoteCache, Registry, SampleCatalogAdapter, ServiceType, SourceKind, VehicleEstimateAdapter, WarpLTLAdapter,
-    default_registry, request_from_intake,
+    AdapterError, AdapterMetadata, BudgetTruckAdapter, Capability, ErrorCode, FMCSAAdapter, MoveRequest, PriceKind,
+    PublicStorageAdapter, Quote, QuoteAdapter, QuoteCache, Registry, SampleCatalogAdapter, ServiceType, SourceKind,
+    UHaulAdapter, VehicleEstimateAdapter, WarpLTLAdapter, default_registry, request_from_intake,
 )
 from moving_agent.adapters.base import CONFIDENCE_CAP, Location, Vehicle, now
 
@@ -31,7 +31,8 @@ def la_to_sf(**kw) -> MoveRequest:
     return MoveRequest(**base)
 
 
-ALL_QUOTE_ADAPTERS = [SampleCatalogAdapter(), VehicleEstimateAdapter(), WarpLTLAdapter()]
+ALL_QUOTE_ADAPTERS = [SampleCatalogAdapter(), VehicleEstimateAdapter(), WarpLTLAdapter(),
+                      PublicStorageAdapter(), UHaulAdapter(), BudgetTruckAdapter()]
 
 
 # ---- contract: every adapter ----

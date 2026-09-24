@@ -40,6 +40,7 @@ The LLM is picked from whichever key is set: `FLATKEY_API_KEY` -> Claude Sonnet 
 | `moving_agent/adapters/bridge.py` | Converts registry quotes to planner `Offer`s; used by both web app and evals |
 | `moving_agent/adapters/request.py` | Maps `Intake` into the normalized provider request |
 | `moving_agent/adapters/sample_catalog.py`, `vehicle.py`, `warp.py`, `fmcsa.py` | Sample-rate, ship-vs-drive, Warp LTL (stub) and FMCSA mover-vetting adapters |
+| `moving_agent/adapters/public_storage.py`, `uhaul.py`, `budget_truck.py`, `scrape.py` | Opt-in website adapters (`ENABLE_UNOFFICIAL_ADAPTERS`) for storage and one-way truck prices; shared client, error mapping and bot-check detection in `scrape.py` |
 | `moving_agent/accounts.py` | Per-user Gmail OAuth (`gmail.send` + `openid email`), encrypted refresh tokens in SQLite |
 | `moving_agent/inventory.py`, `truecost.py`, `timeline.py`, `listings.py`, `geo.py` | Deterministic inventory, all-in cost, backward move schedule, rental-risk and geocoding/distance modules |
 | `moving_agent/drafts.py`, `emailer.py` | Deterministic quote/listing drafts and Gmail API, SMTP or local-outbox delivery |
