@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 from pydantic_ai.usage import UsageLimits
 
-from .. import geo
+from .. import geo, home
 from ..agent import AgentDeps, build_model, fill_derived, model_configured, moving_agent, pick_model, run_without_llm, trace
 from ..models import HomeSize, Intake
 from ..adapters import QuoteCache, RegistrySource, default_registry
@@ -26,6 +26,30 @@ from ..listings import check as check_listing_rules
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
+
+def _checked(iso: str) -> str:
+    """ISO timestamp -> 'Sep 23 20:00 UTC' for 'when was this fetched' labels."""
+    from datetime import datetime as _dt, timezone as _tz
+    try:
+        t = _dt.fromisoformat(iso).astimezone(_tz.utc)
+    except (TypeError, ValueError):
+        return ""
+    return f"{t:%b} {t.day} {t:%H:%M} UTC"
+
+
+def _clock(iso: str) -> str:
+    """ISO timestamp -> local '8:30' (the time the user typed)."""
+    from datetime import datetime as _dt
+    try:
+        t = _dt.fromisoformat(iso)
+    except (TypeError, ValueError):
+        return ""
+    return f"{t.hour}:{t.minute:02d}"
+
+
+templates.env.filters["checked"] = _checked
+templates.env.filters["clock"] = _clock
 # Models sometimes add markdown emphasis; show plain text.
 templates.env.filters["plain"] = lambda text: (text or "").replace("**", "").replace("__", "")
 app = FastAPI(title="Moving agent")
@@ -219,7 +243,12 @@ async def plan(
             intake = intake.model_copy(update={"volume_cuft": max(20, min(3000, inventory.total_cuft)), "weight_lbs": inventory.total_lbs})
 
     sid = request.state.sid
-    deps = AgentDeps(intake=intake, sources=SOURCES, inventory=inventory)
+    leave = home.departure_time(intake.move_date, intake.commute_departure_time)
+    home_results = [{"address": address,
+                     "commute": home.commute(address, intake.commute_destination, intake.commute_mode, departure=leave),
+                     "schools": home.schools(address), "utilities": home.utilities(address)}
+                    for address in intake.candidate_addresses]
+    deps = AgentDeps(intake=intake, sources=SOURCES, inventory=inventory, home_results=home_results)
     s = Session(sid=sid, intake=intake, deps=deps, used_llm=model_configured())
     rid = uuid.uuid4().hex[:12]
     SESSIONS[rid] = s
@@ -253,6 +282,7 @@ def show_plan(request: Request, rid: str):
         "steps": trace(s.history),
         "model": pick_model(), "inventory": d.inventory, "vehicle_options": d.vehicle_options,
         "true_cost": d.true_cost, "timeline": d.timeline, "listing_checks": d.listing_checks,
+        "home_results": d.home_results,
         "adapter_errors": [e for src in d.sources if hasattr(src, "errors") for e in src.errors(d.intake)],
     })
 
