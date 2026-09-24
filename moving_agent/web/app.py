@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 from pydantic_ai.usage import UsageLimits
 
-from .. import geo, photo_inventory
+from .. import geo, home, photo_inventory
 from ..agent import AgentDeps, build_model, fill_derived, model_configured, moving_agent, pick_model, run_without_llm, trace
 from ..models import HomeSize, Intake
 from ..adapters import QuoteCache, RegistrySource, default_registry
@@ -26,6 +26,30 @@ from ..listings import check as check_listing_rules
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
+
+def _checked(iso: str) -> str:
+    """ISO timestamp -> 'Sep 23 20:00 UTC' for 'when was this fetched' labels."""
+    from datetime import datetime as _dt, timezone as _tz
+    try:
+        t = _dt.fromisoformat(iso).astimezone(_tz.utc)
+    except (TypeError, ValueError):
+        return ""
+    return f"{t:%b} {t.day} {t:%H:%M} UTC"
+
+
+def _clock(iso: str) -> str:
+    """ISO timestamp -> local '8:30' (the time the user typed)."""
+    from datetime import datetime as _dt
+    try:
+        t = _dt.fromisoformat(iso)
+    except (TypeError, ValueError):
+        return ""
+    return f"{t.hour}:{t.minute:02d}"
+
+
+templates.env.filters["checked"] = _checked
+templates.env.filters["clock"] = _clock
 # Models sometimes add markdown emphasis; show plain text.
 templates.env.filters["plain"] = lambda text: (text or "").replace("**", "").replace("__", "")
 app = FastAPI(title="Moving agent")
@@ -59,6 +83,19 @@ async def ensure_sid(request: Request, call_next):
     if not request.cookies.get(SID_COOKIE):
         response.set_cookie(SID_COOKIE, request.state.sid, httponly=True, samesite="lax", max_age=60 * 60 * 24 * 30)
     return response
+
+
+# Plain-language messages for fields whose raw validator text would confuse users.
+FIELD_MESSAGES = {
+    "candidate_addresses": "Add at most two candidate homes, one address per line.",
+    "commute_mode": "Choose drive, transit, walk or bicycle for the commute.",
+    "commute_departure_time": "Use a 24-hour time like 08:30 for when you leave.",
+}
+
+
+def _readable(error: dict) -> str:
+    field = str(error["loc"][0]) if error.get("loc") else ""
+    return FIELD_MESSAGES.get(field) or f"{'.'.join(str(p) for p in error['loc'])}: {error['msg']}"
 
 
 def _form_context(errors: list[str]) -> dict:
@@ -218,7 +255,7 @@ async def plan(
         )
     except (ValidationError, ValueError) as exc:
         errs = exc.errors() if isinstance(exc, ValidationError) else [{"loc": ("form",), "msg": str(exc)}]
-        errors = geo_errors + [f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}" for e in errs]
+        errors = geo_errors + [_readable(e) for e in errs]
         return templates.TemplateResponse(request, "intake.html", _form_context(errors), status_code=422)
 
     inventory = None
@@ -228,7 +265,12 @@ async def plan(
             intake = intake.model_copy(update={"volume_cuft": max(20, min(3000, inventory.total_cuft)), "weight_lbs": inventory.total_lbs})
 
     sid = request.state.sid
-    deps = AgentDeps(intake=intake, sources=SOURCES, inventory=inventory)
+    leave = home.departure_time(intake.move_date, intake.commute_departure_time)
+    home_results = [{"address": address,
+                     "commute": home.commute(address, intake.commute_destination, intake.commute_mode, departure=leave),
+                     "schools": home.schools(address), "utilities": home.utilities(address)}
+                    for address in intake.candidate_addresses]
+    deps = AgentDeps(intake=intake, sources=SOURCES, inventory=inventory, home_results=home_results)
     s = Session(sid=sid, intake=intake, deps=deps, used_llm=model_configured())
     rid = uuid.uuid4().hex[:12]
     SESSIONS[rid] = s
@@ -262,6 +304,7 @@ def show_plan(request: Request, rid: str):
         "steps": trace(s.history),
         "model": pick_model(), "inventory": d.inventory, "vehicle_options": d.vehicle_options,
         "true_cost": d.true_cost, "timeline": d.timeline, "listing_checks": d.listing_checks,
+        "home_results": d.home_results,
         "adapter_errors": [e for src in d.sources if hasattr(src, "errors") for e in src.errors(d.intake)],
     })
 

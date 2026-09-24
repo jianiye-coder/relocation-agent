@@ -51,6 +51,7 @@ class AgentDeps:
     timeline: list[timeline.Task] = field(default_factory=list)
     listing_checks: list[dict] = field(default_factory=list)
     vetting: list[dict] = field(default_factory=list)
+    home_results: list[dict] = field(default_factory=list)
 
 
 class AgentReply(BaseModel):

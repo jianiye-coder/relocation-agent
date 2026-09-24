@@ -1,0 +1,8 @@
+{
+  "routes": [
+    {
+      "duration": "1800s",
+      "distanceMeters": 12000
+    }
+  ]
+}

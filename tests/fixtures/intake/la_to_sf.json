@@ -1,0 +1,24 @@
+{
+  "name": "Fixture User",
+  "email": "fixture@example.com",
+  "from_zip": "90012",
+  "to_zip": "94110",
+  "distance_miles": 382,
+  "move_date": "2026-10-14",
+  "home_size": "studio",
+  "needs": [
+    "truck",
+    "labor"
+  ],
+  "budget_usd": 1600,
+  "household_size": 2,
+  "pets": [
+    "cat"
+  ],
+  "vehicles": [
+    "car"
+  ],
+  "lease_end": "2026-10-12",
+  "monthly_rent": 3000,
+  "inventory_text": "sofa\nupright piano"
+}
