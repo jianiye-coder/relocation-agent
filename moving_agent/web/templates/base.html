@@ -124,6 +124,16 @@
   .glance-grid p { margin: 0; color: var(--body); font-size: 14px; line-height: 1.45; }
   .glance-grid a { margin-top: auto; font-size: 14px; font-weight: 600; }
   @media (max-width: 640px) { .glance-grid { grid-template-columns: 1fr; } }
+  .agent-fab { position: fixed; right: 24px; bottom: 24px; z-index: 20; }
+  .agent-fab > summary { list-style: none; width: 56px; height: 56px; border-radius: var(--r-full); display: grid; place-items: center; background: var(--ink); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: var(--shadow); }
+  .agent-fab > summary::-webkit-details-marker { display: none; }
+  .agent-fab > summary:hover { background: var(--primary); }
+  .agent-fab > summary:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
+  .agent-fab[open] > summary { background: var(--primary); }
+  .agent-fab-panel { position: absolute; right: 0; bottom: 68px; width: min(360px, calc(100vw - 32px)); padding: 18px; border: 1px solid var(--hairline); border-radius: var(--r-md); background: var(--canvas); box-shadow: var(--shadow); }
+  .agent-fab-panel h2 { margin: 0; font-size: 18px; }
+  .agent-fab-panel p { margin: 6px 0 14px; }
+  @media (max-width: 640px) { .agent-fab { right: 16px; bottom: 16px; } }
   .approval { border: 2px solid var(--ink); }
   .approval .actions form { margin: 0; }
   details.email-card summary { cursor: pointer; font-size: 14px; }

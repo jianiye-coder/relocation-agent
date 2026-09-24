@@ -42,6 +42,13 @@ def test_options_show_cost_timing_included_and_tradeoffs():
     assert "Lowest price" in l["highlights"] and "Highest rated" in l["highlights"]
 
 
+def test_option_included_services_keep_provider_links():
+    rec = plan([offer("truck", "Budget Truck", "12 ft truck", 761.25, 3.8)])
+    rec.offers[0].contact_url = "https://www.budgettruck.com/"
+    included = option_views([rec], budget=1500, requested_date=MOVE)[0]["included"]
+    assert included[0]["provider_url"] == "https://www.budgettruck.com/"
+
+
 def test_over_budget_note():
     v = option_views([plan([offer("truck", "Budget Truck", "12 ft", 761.25, 3.8)], budget=90)], 90, MOVE)[0]
     assert not v["within_budget"] and v["budget_note"] == "$671 over your $90 budget"

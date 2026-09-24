@@ -95,6 +95,7 @@ def option_views(plans: list[Plan], budget: int, requested_date: date) -> list[d
                 "service": o.service,
                 "service_label": _service(o),
                 "provider": o.provider,
+                "provider_url": o.contact_url,
                 "title": o.title,
                 "price": f"${o.price_usd:,.2f}",
                 "rating": o.rating,
@@ -173,4 +174,3 @@ def timeline_view(tasks: list[Task], move_date: date, today: date | None = None)
         "move_day": _day(move_date),
         "days_left": days_left,
     }
-
