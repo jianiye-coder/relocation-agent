@@ -29,6 +29,17 @@ def test_intake_uses_a_destination_area_instead_of_asking_for_a_to_zip():
     assert '<label for="to_zip">' not in page
 
 
+def test_intake_explains_each_service_choice():
+    page = TestClient(web.app).get("/").text
+    for explanation in [
+        "I’ll drive and load it",
+        "Someone else handles the heavy lifting",
+        "I need a place to keep things",
+        "I’ll load it; the provider transports it",
+    ]:
+        assert explanation in page
+
+
 def test_email_delivery_routes_are_not_registered():
     client = TestClient(web.app)
     for path in ["/send/nope", "/approve/nope", "/auth/google/start", "/auth/google/callback"]:
