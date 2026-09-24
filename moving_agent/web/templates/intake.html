@@ -35,7 +35,7 @@
     <div class="field">
       <label for="to_address">Moving to</label>
       <input id="to_address" name="to_address" autocomplete="address-level2" placeholder="City, neighborhood, or area" data-geo="to" required aria-describedby="to_help to_note">
-      <p class="muted geo-note" id="to_help">Start broad — a street address is not needed. For example: Lakeview, Chicago; Mountain View; South Bay; or East Bay.</p>
+      <p class="muted geo-note" id="to_help">Start broad — a street address is not needed. City names work without a state, too. For example: Cupertino; Lakeview, Chicago; Mountain View; South Bay; or East Bay.</p>
       <p class="muted geo-note" id="to_note" aria-live="polite"></p>
     </div>
     <div class="field">
@@ -69,7 +69,7 @@
     </div>
     <div class="row">
       <div class="field"><label for="from_floor">Current floor</label><input id="from_floor" name="from_floor" type="number" min="0" value="1"></div>
-      <div class="field"><label for="to_floor">New floor</label><input id="to_floor" name="to_floor" type="number" min="0" value="1"></div>
+      <div class="field"><label for="to_floor">New floor <span class="hint">· optional</span></label><input id="to_floor" name="to_floor" type="number" min="0" value="1"></div>
     </div>
     <div class="pills">
       <label class="pill"><input type="checkbox" name="from_elevator" value="true"><span>Elevator at current home</span></label>
@@ -115,10 +115,10 @@
   <section class="block">
     <h2>What you need</h2>
     <div class="pills" role="group" aria-label="Services">
-      <label class="pill"><input type="checkbox" name="needs" value="truck" checked><span>Moving truck</span></label>
-      <label class="pill"><input type="checkbox" name="needs" value="labor" checked><span>Movers</span></label>
-      <label class="pill"><input type="checkbox" name="needs" value="storage"><span>Storage</span></label>
-      <label class="pill"><input type="checkbox" name="needs" value="container"><span>Container</span></label>
+      <label class="pill service-pill"><input type="checkbox" name="needs" value="truck" checked><span>Moving truck<small>I’ll drive and load it</small></span></label>
+      <label class="pill service-pill"><input type="checkbox" name="needs" value="labor" checked><span>Movers<small>Someone else handles the heavy lifting</small></span></label>
+      <label class="pill service-pill"><input type="checkbox" name="needs" value="storage"><span>Storage<small>I need a place to keep things</small></span></label>
+      <label class="pill service-pill"><input type="checkbox" name="needs" value="container"><span>Container<small>I’ll load it; the provider transports it</small></span></label>
     </div>
     <p class="muted" style="margin:12px 0 0">We compare U-Haul, Budget and Penske trucks; TaskRabbit and HireAHelper movers; Extra Space, Public Storage and CubeSmart storage; PODS and U-Pack containers.</p>
     <div class="row" style="margin-top:16px">
@@ -133,6 +133,10 @@
       <label for="items_to_sell">Items to sell, one per line</label>
       <textarea id="items_to_sell" name="items_to_sell" rows="3" placeholder="IKEA sofa&#10;Bookshelf"></textarea>
     </div>
+  </section>
+
+  <section class="block">
+    <h2>Additional details <span class="hint" style="font-size:14px;font-weight:400">· optional</span></h2>
     <div class="field">
       <label for="notes">Anything else?</label>
       <textarea id="notes" name="notes" rows="2"></textarea>
@@ -233,7 +237,7 @@
       const data = await r.json();
       if (!r.ok) {
         note.textContent = side === "to"
-          ? "We couldn't resolve this area yet. Try adding the city and state, or use a ZIP."
+          ? "We couldn't resolve this area yet. Try a city name, city and state, or ZIP."
           : data.error;
         return;
       }

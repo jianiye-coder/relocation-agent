@@ -441,10 +441,12 @@ def _short(content) -> str:
     if isinstance(content, list):
         if content and isinstance(content[0], dict) and "total_usd" in content[0]:
             best = content[0]
-            return f"{len(content)} plan(s); best ${best['total_usd']:,.2f}" + ("" if best["within_budget"] else " (over budget)")
+            budget_note = "" if best.get("within_budget", False) else " (over budget)"
+            return f"{len(content)} plan(s); best ${best['total_usd']:,.2f}" + budget_note
         if content and isinstance(content[0], dict) and "price_usd" in content[0]:
             cheapest = min(content, key=lambda o: o["price_usd"])
-            return f"{len(content)} offer(s); cheapest {cheapest['provider']} ${cheapest['price_usd']:,.2f}"
+            provider = cheapest.get("provider") or cheapest.get("title") or "provider unavailable"
+            return f"{len(content)} offer(s); cheapest {provider} ${cheapest['price_usd']:,.2f}"
         if content and isinstance(content[0], dict) and "ok" in content[0]:
             return f"{sum(1 for r in content if r['ok'])} of {len(content)} sent"
         if content and isinstance(content[0], dict) and "note" in content[0]:
