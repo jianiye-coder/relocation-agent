@@ -40,6 +40,16 @@ def test_intake_explains_each_service_choice():
         assert explanation in page
 
 
+def test_intake_marks_new_floor_optional_and_keeps_notes_outside_selling_section():
+    page = TestClient(web.app).get("/").text
+    assert 'for="to_floor">New floor <span class="hint">· optional</span>' in page
+    selling_start = page.index("<h2>Selling before you move")
+    additional_start = page.index("<h2>Additional details")
+    selling_section = page[selling_start:additional_start]
+    assert 'for="notes"' not in selling_section
+    assert 'for="notes"' in page[additional_start:]
+
+
 def test_email_delivery_routes_are_not_registered():
     client = TestClient(web.app)
     for path in ["/send/nope", "/approve/nope", "/auth/google/start", "/auth/google/callback"]:

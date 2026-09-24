@@ -61,7 +61,7 @@
     </div>
     <div class="row">
       <div class="field"><label for="from_floor">Current floor</label><input id="from_floor" name="from_floor" type="number" min="0" value="1"></div>
-      <div class="field"><label for="to_floor">New floor</label><input id="to_floor" name="to_floor" type="number" min="0" value="1"></div>
+      <div class="field"><label for="to_floor">New floor <span class="hint">· optional</span></label><input id="to_floor" name="to_floor" type="number" min="0" value="1"></div>
     </div>
     <div class="pills">
       <label class="pill"><input type="checkbox" name="from_elevator" value="true"><span>Elevator at current home</span></label>
@@ -125,6 +125,10 @@
       <label for="items_to_sell">Items to sell, one per line</label>
       <textarea id="items_to_sell" name="items_to_sell" rows="3" placeholder="IKEA sofa&#10;Bookshelf"></textarea>
     </div>
+  </section>
+
+  <section class="block">
+    <h2>Additional details <span class="hint" style="font-size:14px;font-weight:400">· optional</span></h2>
     <div class="field">
       <label for="notes">Anything else?</label>
       <textarea id="notes" name="notes" rows="2"></textarea>
