@@ -47,8 +47,17 @@ def test_corrupt_image_is_rejected():
         asyncio.run(photo_inventory.analyze([("bad.jpg", "image/jpeg", b"not-an-image")], "google:gemini-flash-latest"))
 
 
-def test_missing_model_leaves_text_fallback_available():
+def test_photo_scan_is_hidden_by_default():
     from moving_agent.web import app as web
+    client = TestClient(web.app)
+    page = client.get("/").text
+    assert "Room photos" not in page and "inventory_photos" not in page and 'name="inventory_text"' in page
+    assert client.post("/api/inventory/photos", files=[("photos", ("room.jpg", jpeg(), "image/jpeg"))]).status_code == 404
+
+
+def test_missing_model_leaves_text_fallback_available(monkeypatch):
+    from moving_agent.web import app as web
+    monkeypatch.setenv("ENABLE_PHOTO_INVENTORY", "1")
     client = TestClient(web.app)
     response = client.post("/api/inventory/photos", files=[("photos", ("room.jpg", jpeg(), "image/jpeg"))])
     assert response.status_code == 422
@@ -56,8 +65,9 @@ def test_missing_model_leaves_text_fallback_available():
     assert 'name="inventory_text"' in client.get("/").text
 
 
-def test_too_many_uploads_rejected_before_analysis():
+def test_too_many_uploads_rejected_before_analysis(monkeypatch):
     from moving_agent.web import app as web
+    monkeypatch.setenv("ENABLE_PHOTO_INVENTORY", "1")
     response = TestClient(web.app).post("/api/inventory/photos", files=[
         ("photos", ("room.jpg", jpeg(), "image/jpeg")) for _ in range(11)
     ])
@@ -107,6 +117,7 @@ def test_photo_endpoint_returns_editable_items_without_persisting_uploads(monkey
             estimate=photo_inventory.estimate("sofa"),
         )
 
+    monkeypatch.setenv("ENABLE_PHOTO_INVENTORY", "1")
     monkeypatch.setattr(web, "model_configured", lambda: True)
     monkeypatch.setattr(web, "pick_model", lambda: "google:gemini-flash-latest")
     monkeypatch.setattr(web.photo_inventory, "analyze", fake_analyze)

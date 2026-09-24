@@ -6,7 +6,7 @@ This document distinguishes implemented behavior from remaining review gaps. Fea
 | --- | --- | --- |
 | No email | Disabled routes/tools and planning regression; nothing is delivered even with credentials set | Keep standalone send scripts out of demo |
 | Intake (#8) | Candidate fields persist; readable errors for 3+ homes, unknown commute mode and malformed times (`8:30am`, `25:00`); blank lines ignored | — |
-| Photos (#10) | Count/size/corruption limits, no key, actual multimodal message with fake model, edited inventory math | Live image quality depends on selected model; visual mobile QA remains |
+| Photos (#10) | Hidden in the MVP (`ENABLE_PHOTO_INVENTORY`); count/size/corruption limits, no key, actual multimodal message with fake model, edited inventory math | Planned to return as photo → Marketplace listing (see PRD) |
 | Warp (#7) | MockTransport success and typed failures; sandbox (`wak_test…`) quotes labeled as mock sample data (confidence 0.2); production quotes firm but capped at 0.6 with assumptions in `price_basis` | Confirm with Warp that household goods and residential pickup/delivery are accepted |
 | Homes (#9) | Missing key, response normalization, empty routes (`{}` and `[]`), HTTP errors, departure time sent as `departureTime` (plus `TRAFFIC_AWARE` for driving), past times omitted, explicit school/internet/electricity unavailable states, card shows departure and checked time | Combined ranking of the two homes |
 | Evals | All six cases; no real quote HTTP | Scripted results are not evidence of live-model quality |
@@ -23,7 +23,7 @@ This document distinguishes implemented behavior from remaining review gaps. Fea
 - Warp's pallet conversion is an assumption, disclosed in every quote. It does not establish that a real household shipment fits, or that residential access is included, until Warp confirms.
 - LTL quote display and planner service selection need end-to-end verification: receiving a `Quote` alone does not prove it is a selectable move option.
 - Candidate homes are shown as separate cards. Do not describe this as a combined school/commute ranking; schools stay unavailable until a verified official source is added.
-- Photo inventory still needs a visual check on a phone and a run with a live visual model.
+- Photo inventory is hidden in the MVP. A live run on `flatkey:claude-sonnet-5` works; phone QA and double counting across photos remain if it comes back.
 
 ## Review order
 

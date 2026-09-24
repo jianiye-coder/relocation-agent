@@ -100,8 +100,23 @@ def _readable(error: dict) -> str:
     return FIELD_MESSAGES.get(field) or f"{'.'.join(str(p) for p in error['loc'])}: {error['msg']}"
 
 
+def _flag(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes"}
+
+
+def voice_intake_enabled() -> bool:
+    """Voice intake is hidden for the MVP; ENABLE_VOICE_INTAKE=1 turns it back on."""
+    return _flag("ENABLE_VOICE_INTAKE")
+
+
+def photo_inventory_enabled() -> bool:
+    """Room photo scan is hidden for the MVP; ENABLE_PHOTO_INVENTORY=1 turns it back on."""
+    return _flag("ENABLE_PHOTO_INVENTORY")
+
+
 def _form_context(errors: list[str]) -> dict:
-    return {"home_sizes": [h.value for h in HomeSize], "errors": errors, "today": date.today().isoformat()}
+    return {"home_sizes": [h.value for h in HomeSize], "errors": errors, "today": date.today().isoformat(),
+            "voice_intake": voice_intake_enabled(), "photo_inventory": photo_inventory_enabled()}
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -118,6 +133,8 @@ class VoiceAutofillRequest(BaseModel):
 @app.post("/api/intake/voice-autofill")
 async def voice_autofill(payload: VoiceAutofillRequest):
     """Return user-reviewable form values extracted from a browser voice transcript."""
+    if not voice_intake_enabled():
+        raise HTTPException(404, "Voice intake is turned off.")
     try:
         fields = await voice_intake.extract(payload.transcript, pick_model())
     except voice_intake.VoiceIntakeError as exc:
@@ -173,6 +190,8 @@ def _fill_from_addresses(from_address: str, to_address: str, from_zip: str, to_z
 
 @app.post("/api/inventory/photos")
 async def inventory_photos(request: Request):
+    if not photo_inventory_enabled():
+        raise HTTPException(404, "Photo inventory is turned off.")
     # Multipart files may spool to temporary storage; the context closes and
     # removes them on success and on errors. Filenames are never used as paths.
     async with request.form(max_files=10, max_fields=0) as form:
