@@ -20,6 +20,15 @@ def test_intake_and_plan_have_no_email_delivery_controls(intake, monkeypatch):
     assert "Approve and send" not in page and "Connect Gmail" not in page
 
 
+def test_intake_uses_a_destination_area_instead_of_asking_for_a_to_zip():
+    page = TestClient(web.app).get("/").text
+    assert '<label for="to_address">Moving to</label>' in page
+    assert "City, neighborhood, or area" in page
+    assert "Lakeview, Chicago; Mountain View; South Bay; or East Bay." in page
+    assert '<input id="to_zip" name="to_zip" type="hidden">' in page
+    assert '<label for="to_zip">' not in page
+
+
 def test_email_delivery_routes_are_not_registered():
     client = TestClient(web.app)
     for path in ["/send/nope", "/approve/nope", "/auth/google/start", "/auth/google/callback"]:
