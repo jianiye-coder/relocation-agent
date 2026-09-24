@@ -60,3 +60,15 @@ def test_candidate_home_input_errors_are_readable(intake, field, value, message)
 def test_two_candidate_homes_and_blank_lines_are_fine(intake):
     response = TestClient(web.app).post("/plan", data=form(intake, candidate_addresses="\n1 Main St\n\n2 Oak St\n"))
     assert response.status_code == 200
+
+
+def test_candidate_home_card_shows_schools_row_and_checked_time(intake, monkeypatch):
+    from moving_agent import home
+    monkeypatch.setattr(home, "commute", lambda *a, **k: {"available": True, "minutes": 25, "miles": 5.0, "source": "Google Routes",
+                                                         "fetched_at": "2026-09-23T20:00:00+00:00", "departure": "2026-10-14T08:30:00-07:00"})
+    response = TestClient(web.app).post("/plan", data=form(
+        intake, candidate_addresses="1 Main St, San Francisco, CA", commute_destination="1 Market St, San Francisco, CA",
+        commute_mode="transit", commute_departure_time="08:30"))
+    assert response.status_code == 200
+    for text in ["Schools:", "No verified school data source", "checked Sep 23", "leaving 8:30"]:
+        assert text in response.text, text
