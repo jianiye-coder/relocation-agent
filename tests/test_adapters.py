@@ -246,6 +246,14 @@ def test_fmcsa_docket_lookup_and_not_found(monkeypatch):
     assert not missing.found and missing.notes
 
 
+def test_fmcsa_company_name_search_returns_candidate_carriers(monkeypatch):
+    monkeypatch.setenv("FMCSA_WEB_KEY", "k")
+    matches = asyncio.run(fmcsa_with("name_list.json").search("Bay Movers"))
+    assert len(matches) == 2
+    assert matches[0].legal_name == "BAY MOVERS LLC" and matches[0].usdot_number == 1234567
+    assert matches[1].legal_name == "BAY MOVING INC" and matches[1].allowed_to_operate is False
+
+
 def test_fmcsa_errors(monkeypatch):
     monkeypatch.setenv("FMCSA_WEB_KEY", "k")
     for status, code in [(403, ErrorCode.blocked), (429, ErrorCode.rate_limited), (503, ErrorCode.unavailable)]:

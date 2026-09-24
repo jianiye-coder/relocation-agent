@@ -334,8 +334,9 @@ def listing_check(request: Request, text: str = Form(...), price_usd: str = Form
 
 # ---- mover vetting ----
 
-def _mover_check_context(*, result=None, error: str = "", usdot: str = "", mc: str = "") -> dict:
-    return {"result": result, "error": error, "form": {"usdot": usdot, "mc": mc}}
+def _mover_check_context(*, result=None, matches=None, error: str = "", name: str = "", usdot: str = "", mc: str = "") -> dict:
+    return {"result": result, "matches": matches or [], "error": error,
+            "form": {"name": name, "usdot": usdot, "mc": mc}}
 
 
 @app.get("/mover-check", response_class=HTMLResponse)
@@ -344,27 +345,31 @@ def mover_check_form(request: Request):
 
 
 @app.post("/mover-check", response_class=HTMLResponse)
-async def mover_check(request: Request, usdot: str = Form(""), mc: str = Form("")):
-    """Look up one carrier identifier in FMCSA's QCMobile registry."""
-    usdot, mc = usdot.strip(), mc.strip()
-    if bool(usdot) == bool(mc):
+async def mover_check(request: Request, name: str = Form(""), usdot: str = Form(""), mc: str = Form("")):
+    """Look up a carrier by name or one identifier in FMCSA's QCMobile registry."""
+    name, usdot, mc = name.strip(), usdot.strip(), mc.strip()
+    if sum(bool(value) for value in (name, usdot, mc)) != 1:
         return templates.TemplateResponse(
             request, "mover_check.html",
-            _mover_check_context(error="Enter either a USDOT number or an MC number — not both.", usdot=usdot, mc=mc),
+            _mover_check_context(error="Enter a company name, USDOT number, or MC number — one only.", name=name, usdot=usdot, mc=mc),
             status_code=422,
         )
     if usdot and not usdot.isdigit():
         return templates.TemplateResponse(
             request, "mover_check.html",
-            _mover_check_context(error="USDOT numbers contain digits only.", usdot=usdot, mc=mc), status_code=422,
+            _mover_check_context(error="USDOT numbers contain digits only.", name=name, usdot=usdot, mc=mc), status_code=422,
         )
     if mc and not any(char.isdigit() for char in mc):
         return templates.TemplateResponse(
             request, "mover_check.html",
-            _mover_check_context(error="Enter the digits from the MC number, for example MC-123456.", usdot=usdot, mc=mc), status_code=422,
+            _mover_check_context(error="Enter the digits from the MC number, for example MC-123456.", name=name, usdot=usdot, mc=mc), status_code=422,
         )
     try:
-        result = await FMCSAAdapter().check(usdot=int(usdot) if usdot else None, mc=mc or None)
+        adapter = FMCSAAdapter()
+        if name:
+            matches = await adapter.search(name)
+            return templates.TemplateResponse(request, "mover_check.html", _mover_check_context(matches=matches, name=name))
+        result = await adapter.check(usdot=int(usdot) if usdot else None, mc=mc or None)
     except AdapterError as exc:
         message = (
             "Add FMCSA_WEB_KEY to .env before checking live records."
@@ -372,6 +377,6 @@ async def mover_check(request: Request, usdot: str = Form(""), mc: str = Form(""
         )
         return templates.TemplateResponse(
             request, "mover_check.html",
-            _mover_check_context(error=f"FMCSA lookup unavailable: {message}", usdot=usdot, mc=mc), status_code=502,
+            _mover_check_context(error=f"FMCSA lookup unavailable: {message}", name=name, usdot=usdot, mc=mc), status_code=502,
         )
     return templates.TemplateResponse(request, "mover_check.html", _mover_check_context(result=result, usdot=usdot, mc=mc))

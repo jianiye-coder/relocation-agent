@@ -48,7 +48,25 @@ def test_mover_check_requires_exactly_one_identifier():
     client = TestClient(web.app)
     assert client.get("/mover-check").status_code == 200
     response = client.post("/mover-check", data={"usdot": "123", "mc": "MC-456"})
-    assert response.status_code == 422 and "either a USDOT number or an MC number" in response.text
+    assert response.status_code == 422 and "company name, USDOT number, or MC number" in response.text
+
+
+def test_mover_check_searches_by_company_name(monkeypatch):
+    from datetime import datetime, timezone
+    from moving_agent.adapters.base import CarrierCheck
+
+    async def fake_search(self, name):
+        assert name == "Bay Movers"
+        return [CarrierCheck(adapter_id="fmcsa_qcmobile", query="name Bay Movers", found=True, usdot_number=1234567,
+                             mc_number=987654, legal_name="BAY MOVERS LLC", dba_name="Bay Movers",
+                             allowed_to_operate=True, city="San Francisco", state="CA", source="FMCSA",
+                             fetched_at=datetime.now(timezone.utc))]
+
+    monkeypatch.setattr(web.FMCSAAdapter, "search", fake_search)
+    response = TestClient(web.app).post("/mover-check", data={"name": "Bay Movers"})
+    assert response.status_code == 200
+    for text in ["Choose the mover", "BAY MOVERS LLC", "USDOT 1234567", "MC 987654", "Use this mover"]:
+        assert text in response.text
 
 
 def test_mover_check_explains_missing_fmcsa_key(monkeypatch):
