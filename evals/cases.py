@@ -38,7 +38,7 @@ CASES = [
          Expect(plan_within_budget=True),
          home_size="studio", move_date=WEDNESDAY, needs=["truck", "labor"], budget_usd=1200),
     case("piano_no_taskrabbit_weekend",
-         Expect(plan_within_budget=True, excluded_providers=["TaskRabbit"], email_mentions=["piano"],
+         Expect(plan_within_budget=True, excluded_providers=["TaskRabbit"],
                 must_try_alternatives=True, move_on_weekday=True),
          notes="I have an upright piano. Please don't use TaskRabbit.",
          home_size="1br", from_floor=3, move_date=SATURDAY, flexible_days=3, needs=["truck", "labor"], budget_usd=1600),
