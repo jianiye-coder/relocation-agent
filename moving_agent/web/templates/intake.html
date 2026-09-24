@@ -27,7 +27,7 @@
     <div class="field">
       <label for="to_address">Moving to</label>
       <input id="to_address" name="to_address" autocomplete="address-level2" placeholder="City, neighborhood, or area" data-geo="to" required aria-describedby="to_help to_note">
-      <p class="muted geo-note" id="to_help">Start broad — a street address is not needed. For example: Lakeview, Chicago; Mountain View; South Bay; or East Bay.</p>
+      <p class="muted geo-note" id="to_help">Start broad — a street address is not needed. City names work without a state, too. For example: Cupertino; Lakeview, Chicago; Mountain View; South Bay; or East Bay.</p>
       <p class="muted geo-note" id="to_note" aria-live="polite"></p>
     </div>
     <div class="field">
@@ -152,7 +152,7 @@
       const data = await r.json();
       if (!r.ok) {
         note.textContent = side === "to"
-          ? "We couldn't resolve this area yet. Try adding the city and state, or use a ZIP."
+          ? "We couldn't resolve this area yet. Try a city name, city and state, or ZIP."
           : data.error;
         return;
       }
