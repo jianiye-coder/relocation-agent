@@ -1,0 +1,49 @@
+{
+ "trucksSorted": [
+  {
+   "Name": "Cargo Van",
+   "Description": "1 - 2 Rooms (357 cu.ft.)",
+   "BaseTruckRate": 0.0,
+   "IsSoldOut": true,
+   "NoOfMiles": 0,
+   "RentalDays": 3,
+   "TruckPickupDate": "10/14/2026 12:00:00 AM",
+   "MilesMessage": null,
+   "ClassCode": "90412"
+  },
+  {
+   "Name": "12' Moving Truck",
+   "Description": "1 - 2 Rooms (443 cu.ft.)",
+   "BaseTruckRate": 427.0,
+   "IsSoldOut": false,
+   "NoOfMiles": 482,
+   "RentalDays": 3,
+   "TruckPickupDate": "10/14/2026 12:00:00 AM",
+   "MilesMessage": "inc.3 days & 482 miles.",
+   "ClassCode": "90112"
+  },
+  {
+   "Name": "16' Moving Truck",
+   "Description": "3 - 4 Rooms (658 cu.ft.)",
+   "BaseTruckRate": 496.0,
+   "IsSoldOut": false,
+   "NoOfMiles": 482,
+   "RentalDays": 3,
+   "TruckPickupDate": "10/14/2026 12:00:00 AM",
+   "MilesMessage": "inc.3 days & 482 miles.",
+   "ClassCode": "90115"
+  },
+  {
+   "Name": "26' Moving Truck",
+   "Description": "5 - 8 Rooms (1698 cu.ft.)",
+   "BaseTruckRate": 811.0,
+   "IsSoldOut": false,
+   "NoOfMiles": 482,
+   "RentalDays": 3,
+   "TruckPickupDate": "10/14/2026 12:00:00 AM",
+   "MilesMessage": "inc.3 days & 482 miles.",
+   "ClassCode": "90426"
+  }
+ ],
+ "ExceptionMessage": null
+}

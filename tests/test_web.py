@@ -203,3 +203,36 @@ def test_housing_page_has_specific_filter_errors():
     assert response.status_code == 200
     assert "Minimum rent cannot be higher" in response.text
     assert "Enter a whole number for bedrooms" in response.text
+
+
+def test_intake_asks_for_addresses_not_zip_or_distance():
+    page = TestClient(web.app).get("/").text
+    assert "From ZIP" not in page and "Driving distance (miles)" not in page
+    for field in ["from_zip", "to_zip", "distance_miles"]:
+        assert f'id="{field}" name="{field}" type="hidden"' in page
+
+
+def test_plan_fills_zips_and_distance_from_the_addresses(intake, monkeypatch):
+    places = {"1 Main St, Los Angeles, CA": web.geo.Place(matched_address="LA", zip="90012", lat=34.05, lon=-118.24),
+              "Mission, San Francisco": web.geo.Place(matched_address="SF", zip="94110", lat=37.75, lon=-122.41)}
+    monkeypatch.setattr(web.geo, "geocode", lambda address: places[address])
+    monkeypatch.setattr(web.geo, "driving_distance", lambda a, b: web.geo.Distance(miles=382, source="test"))
+    data = form(intake, from_zip="", to_zip="", distance_miles="",
+                from_address="1 Main St, Los Angeles, CA", to_address="Mission, San Francisco")
+    client = TestClient(web.app)
+    response = client.post("/plan", data=data)
+    assert response.status_code == 200
+    import re
+    saved = web.SESSIONS[re.search(r"/plan/(\w+)", str(response.url)).group(1)].intake
+    assert (saved.from_zip, saved.to_zip, saved.distance_miles) == ("90012", "94110", 382)
+
+
+def test_unfound_address_gets_a_plain_error(intake, monkeypatch):
+    def geocode(address):
+        raise web.geo.GeoError("We couldn't find that address.")
+    monkeypatch.setattr(web.geo, "geocode", geocode)
+    data = form(intake, from_zip="", to_zip="", distance_miles="", from_address="nowhere", to_address="Mission, San Francisco")
+    response = TestClient(web.app).post("/plan", data=data)
+    assert response.status_code == 422
+    assert "Moving from: We couldn&#39;t find that address." in response.text
+    assert "String should match pattern" not in response.text and "we can find" not in response.text

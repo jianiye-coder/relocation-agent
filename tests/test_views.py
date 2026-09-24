@@ -4,7 +4,7 @@ from datetime import date, timedelta
 
 from moving_agent.models import Offer, Plan
 from moving_agent.timeline import Task, build
-from moving_agent.web.views import option_views, timeline_view
+from moving_agent.web.views import option_views, price_notes, timeline_view
 
 MOVE = date(2026, 9, 30)
 
@@ -73,3 +73,14 @@ def test_today_marker_at_end_when_everything_is_past():
     tasks = build(MOVE, today=date(2026, 12, 1))
     flat = [i for p in timeline_view(tasks, MOVE, today=date(2026, 12, 1))["phases"] for i in p["items"]]
     assert flat[-1]["kind"] == "today"
+
+
+def test_price_notes_match_where_prices_came_from():
+    sample = plan([offer("truck", "U-Haul", "10 ft truck", 400, 4.0)])
+    live = plan([offer("truck", "Budget", "12' truck", 427, None).model_copy(
+        update={"price_kind": "firm_quote", "source": "https://www.budgettruck.com/"})])
+    assert price_notes(option_views([sample], 1500, MOVE)) == [
+        "Sample prices are illustrative until live provider adapters are connected."]
+    notes = price_notes(option_views([live], 1500, MOVE))
+    assert len(notes) == 1 and "confirm on their site before you book" in notes[0]
+    assert len(price_notes(option_views([live, sample], 1500, MOVE))) == 2

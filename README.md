@@ -35,11 +35,12 @@ Set only your preferred LLM key. If several are set, selection priority is Flatk
 | `FLATKEY_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_API_KEY` / `OPENAI_API_KEY` | Choose one. With no key, use text inventory and deterministic planning. |
 | `MOVING_AGENT_MODEL` | Optional provider-prefixed model override. |
 | `GOOGLE_MAPS_API_KEY` | Google geocoding/distance and candidate commute. Move geocoding/distance can fall back to Census/OSRM; candidate commute reports unavailable. |
-| None | The Find a home page retrieves active rentals and photos from Realtor.com through [HomeHarvest](https://github.com/ZacharyHampton/HomeHarvest). It is an unofficial scrape, so availability can change and searches may be rate-limited; never treat its results as an MLS feed. |
+| None | The Find a home page retrieves active rentals and photos from Realtor.com through [HomeHarvest](https://github.com/ZacharyHampton/HomeHarvest). It is an unofficial scrape, so availability can change and searches may be rate-limited. |
 | `FMCSA_WEB_KEY` | Carrier lookup. Missing credentials produce a typed unavailable/auth state. |
 | `WARP_MODE` | `sandbox` (default) or `production`; production must be selected explicitly. No booking is called. |
 | `WARP_API_KEY` | Sandbox credential used when `WARP_MODE=sandbox`; `wak_test_` quotes are mock data. |
 | `WARP_PRODUCTION_API_KEY` | Live credential used only when `WARP_MODE=production`; quote assumptions remain labeled. |
+| `ENABLE_UNOFFICIAL_ADAPTERS` | Comma-separated website adapters to turn on: `public_storage`, `uhaul`, `budget_truck`. Off by default. They read the same public pages the providers' own search boxes use (Public Storage city pages; U-Haul and Budget one-way rate searches), never reserve anything, and report a 403 or bot check as `blocked` instead of working around it. Their terms of service have not been reviewed, so keep them for local demos. Once any real price exists for a service, sample prices for that service are dropped. Penske is not included: its rate API sits behind bot protection. |
 | `QUOTE_CACHE=off` | Disable quote cache, useful for isolated verification. |
 
 There is no implemented FCC or NREL/OpenEI address-level adapter. Do not add a `BROADBAND_API_KEY` or assume that an NREL key enables utility lookup. Internet, electricity and schools currently report unavailable on each candidate home (PR #9). Crime scoring is not implemented.

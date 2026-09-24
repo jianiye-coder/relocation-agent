@@ -110,6 +110,19 @@ def option_views(plans: list[Plan], budget: int, requested_date: date) -> list[d
     return views
 
 
+def price_notes(options: list[dict]) -> list[str]:
+    """Footnotes that match where the shown prices actually came from."""
+    items = [i for o in options for i in o["included"]]
+    sample = [i["kind"] == "sample" or "sample" in str(i["source"]) for i in items]
+    notes = []
+    if any(sample):
+        notes.append("Sample prices are illustrative until live provider adapters are connected.")
+    if any(not is_sample and str(i["source"]).startswith("https://") for i, is_sample in zip(items, sample)):
+        notes.append("Website prices are read from each provider's public page when you plan; "
+                     "confirm on their site before you book.")
+    return notes
+
+
 PHASES = [  # (title, what it's for, lowest days-before-move that belongs here)
     ("Plan and book", "3+ weeks before", 21),
     ("Get ready", "1–3 weeks before", 8),

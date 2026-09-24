@@ -31,7 +31,7 @@
     <h2>Where and when</h2>
     <div class="field">
       <label for="from_address">Moving from</label>
-      <input id="from_address" name="from_address" autocomplete="street-address" placeholder="Street, city, state" data-geo="from">
+      <input id="from_address" name="from_address" autocomplete="street-address" placeholder="Street, city, state" data-geo="from" required>
       <p class="muted geo-note" id="from_note" aria-live="polite"></p>
     </div>
     <div class="field">
@@ -39,20 +39,13 @@
       <input id="to_address" name="to_address" autocomplete="address-level2" placeholder="City, neighborhood, or area" data-geo="to" required aria-describedby="to_help to_note">
       <p class="muted geo-note" id="to_help">Start broad — a street address is not needed. City names work without a state, too. For example: Cupertino; Lakeview, Chicago; Mountain View; South Bay; or East Bay.</p>
       <p class="muted geo-note" id="to_note" aria-live="polite"></p>
+      <p class="muted geo-note" id="distance_note" aria-live="polite"></p>
     </div>
-    <div class="field">
-      <label for="from_zip">From ZIP <span class="hint">· filled in for you</span></label>
-      <input id="from_zip" name="from_zip" inputmode="numeric" pattern="\d{5}" required>
-    </div>
+    {# ZIPs and driving distance come from the two addresses: the browser fills these, and the server fills them if it couldn't. #}
+    <input id="from_zip" name="from_zip" type="hidden">
     <input id="to_zip" name="to_zip" type="hidden">
-    <div class="row">
-      <div class="field">
-        <label for="distance_miles">Driving distance (miles) <span class="hint">· calculated for you</span></label>
-        <input id="distance_miles" name="distance_miles" type="number" min="0" max="3500" required>
-        <p class="muted geo-note" id="distance_note" aria-live="polite"></p>
-      </div>
-      <div class="field"><label for="move_date">Move date</label><input id="move_date" name="move_date" type="date" min="{{ today }}" required></div>
-    </div>
+    <input id="distance_miles" name="distance_miles" type="hidden">
+    <div class="field"><label for="move_date">Move date</label><input id="move_date" name="move_date" type="date" min="{{ today }}" required></div>
     <div class="field">
       <label for="flexible_days">How flexible is the date? <span class="hint">· days earlier or later</span></label>
       <select id="flexible_days" name="flexible_days">
@@ -253,13 +246,14 @@
     } catch (e) {
       note.textContent = side === "to"
         ? "Destination lookup is unavailable. Try again, or add the city and state."
-        : "Address lookup is unavailable. Enter the ZIP yourself.";
+        : "Address lookup is unavailable right now. We'll try again when you submit.";
     }
     if (place.from && place.to) distance();
   }
 
   async function distance() {
     const note = $("distance_note");
+    $("distance_miles").value = "";
     note.textContent = "Calculating driving distance...";
     try {
       const q = "from_address=" + encodeURIComponent($("from_address").value) + "&to_address=" + encodeURIComponent($("to_address").value);
@@ -267,9 +261,9 @@
       const data = await r.json();
       if (!r.ok) { note.textContent = data.error; return; }
       $("distance_miles").value = data.distance_miles;
-      note.textContent = "Source: " + data.distance_source;
+      note.textContent = "About " + data.distance_miles + " miles by road (" + data.distance_source + ")";
     } catch (e) {
-      note.textContent = "Couldn't calculate the distance. Enter it yourself.";
+      note.textContent = "Couldn't calculate the distance yet. We'll try again when you submit.";
     }
   }
 
