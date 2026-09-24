@@ -33,14 +33,16 @@
       <p class="muted geo-note" id="from_note" aria-live="polite"></p>
     </div>
     <div class="field">
-      <label for="to_address">Moving to <span class="hint">· just the ZIP is fine if you don't have a home yet</span></label>
-      <input id="to_address" name="to_address" placeholder="Street, city, state, or a ZIP" data-geo="to">
+      <label for="to_address">Moving to</label>
+      <input id="to_address" name="to_address" autocomplete="address-level2" placeholder="City, neighborhood, or area" data-geo="to" required aria-describedby="to_help to_note">
+      <p class="muted geo-note" id="to_help">Start broad — a street address is not needed. For example: Lakeview, Chicago; Mountain View; South Bay; or East Bay.</p>
       <p class="muted geo-note" id="to_note" aria-live="polite"></p>
     </div>
-    <div class="row">
-      <div class="field"><label for="from_zip">From ZIP <span class="hint">· filled in for you</span></label><input id="from_zip" name="from_zip" inputmode="numeric" pattern="\d{5}" required></div>
-      <div class="field"><label for="to_zip">To ZIP <span class="hint">· filled in for you</span></label><input id="to_zip" name="to_zip" inputmode="numeric" pattern="\d{5}" required></div>
+    <div class="field">
+      <label for="from_zip">From ZIP <span class="hint">· filled in for you</span></label>
+      <input id="from_zip" name="from_zip" inputmode="numeric" pattern="\d{5}" required>
     </div>
+    <input id="to_zip" name="to_zip" type="hidden">
     <div class="row">
       <div class="field">
         <label for="distance_miles">Driving distance (miles) <span class="hint">· calculated for you</span></label>
@@ -229,12 +231,19 @@
     try {
       const r = await fetch("/api/geo/place?address=" + encodeURIComponent(address));
       const data = await r.json();
-      if (!r.ok) { note.textContent = data.error; return; }
+      if (!r.ok) {
+        note.textContent = side === "to"
+          ? "We couldn't resolve this area yet. Try adding the city and state, or use a ZIP."
+          : data.error;
+        return;
+      }
       place[side] = data;
       $(side + "_zip").value = data.zip;
       note.textContent = "Found: " + data.matched_address;
     } catch (e) {
-      note.textContent = "Address lookup is unavailable. Enter the ZIP yourself.";
+      note.textContent = side === "to"
+        ? "Destination lookup is unavailable. Try again, or add the city and state."
+        : "Address lookup is unavailable. Enter the ZIP yourself.";
     }
     if (place.from && place.to) distance();
   }
