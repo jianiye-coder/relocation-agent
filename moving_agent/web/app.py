@@ -349,7 +349,7 @@ def _housing_links(filters: dict, rid: str, commute: dict, sort: str) -> dict[st
     """Preserve a housing search while switching a view or clearing its filters."""
     query = {key: value for key, value in {
         **filters, "rid": rid, "commute_destination": commute["destination"],
-        "commute_mode": commute["mode"], "commute_departure_time": commute["departure_time"], "sort": sort,
+        "commute_mode": commute["mode"], "sort": sort,
     }.items() if value not in (None, "")}
     base = "/housing"
     return {
@@ -393,7 +393,7 @@ def _map_points(listings: list[dict]) -> list[dict]:
 
 @app.get("/housing", response_class=HTMLResponse)
 def housing(request: Request, location: str = "", zip_code: str = "", min_rent: str = "", max_rent: str = "", bedrooms: str = "",
-            rid: str = "", commute_destination: str = "", commute_mode: str = "drive", commute_departure_time: str = "",
+            rid: str = "", commute_destination: str = "", commute_mode: str = "drive",
             sort: str = "newest", view: str = "list"):
     plan_session = _session(rid, request) if rid else None
     # Keep old shared ZIP links working while making the user-facing input a flexible area search.
@@ -403,7 +403,7 @@ def housing(request: Request, location: str = "", zip_code: str = "", min_rent: 
     filters, errors = _housing_filters(location, min_rent, max_rent, bedrooms)
     searched = bool(location)
     results = None
-    commute = {"destination": commute_destination, "mode": commute_mode, "departure_time": commute_departure_time}
+    commute = {"destination": commute_destination, "mode": commute_mode}
     if sort not in {"newest", "rent_low", "commute"}:
         sort = "newest"
     if view not in {"list", "map"}:
@@ -426,7 +426,7 @@ def housing(request: Request, location: str = "", zip_code: str = "", min_rent: 
 
 @app.post("/housing/{rid}/select")
 def select_candidate_home(request: Request, rid: str, address: str = Form(...), commute_destination: str = Form(""),
-                          commute_mode: str = Form("drive"), commute_departure_time: str = Form("")):
+                          commute_mode: str = Form("drive")):
     """Attach one Find-a-home result to the current move plan (at most two)."""
     s = _session(rid, request)
     address = address.strip()
@@ -434,19 +434,13 @@ def select_candidate_home(request: Request, rid: str, address: str = Form(...), 
         raise HTTPException(422, "Choose a home first.")
     if commute_mode not in {"drive", "transit", "walk", "bicycle"}:
         raise HTTPException(422, "Choose drive, transit, walk or bicycle for the commute.")
-    if commute_departure_time:
-        try:
-            from datetime import time
-            time.fromisoformat(commute_departure_time)
-        except ValueError as exc:
-            raise HTTPException(422, "Use a 24-hour time like 08:30 for when you leave.") from exc
     addresses = s.intake.candidate_addresses
     if address not in addresses and len(addresses) >= 2:
         raise HTTPException(422, "Your plan already has two candidate homes.")
     updated = s.intake.model_copy(update={
         "candidate_addresses": addresses if address in addresses else [*addresses, address],
         "commute_destination": commute_destination.strip(), "commute_mode": commute_mode,
-        "commute_departure_time": commute_departure_time,
+        "commute_departure_time": "",
     })
     s.intake = updated
     s.deps.intake = updated

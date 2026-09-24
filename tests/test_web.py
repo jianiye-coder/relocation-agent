@@ -35,7 +35,7 @@ def test_candidate_home_controls_live_in_housing_not_intake(intake, monkeypatch)
     import re
     rid = re.search(r"/plan/(\w+)", str(response.url)).group(1)
     housing_page = client.get(f"/housing?rid={rid}").text
-    assert "Compare commute" in housing_page
+    assert "Compare commute" in housing_page and "Leave at" not in housing_page
 
 
 def test_selecting_housing_result_adds_candidate_and_commute_data(intake, monkeypatch):
@@ -46,12 +46,12 @@ def test_selecting_housing_result_adds_candidate_and_commute_data(intake, monkey
     response = client.post("/plan", data=form(intake))
     import re
     rid = re.search(r"/plan/(\w+)", str(response.url)).group(1)
-    response = client.post(f"/housing/{rid}/select", data={"address": "1 Main St, San Francisco, CA", "commute_destination": "1 Market St, San Francisco, CA", "commute_mode": "transit", "commute_departure_time": "08:30"})
+    response = client.post(f"/housing/{rid}/select", data={"address": "1 Main St, San Francisco, CA", "commute_destination": "1 Market St, San Francisco, CA", "commute_mode": "transit"})
     assert response.status_code == 200
     saved = web.SESSIONS[rid].intake
     assert saved.candidate_addresses == ["1 Main St, San Francisco, CA"]
     assert saved.commute_destination == "1 Market St, San Francisco, CA" and saved.commute_mode == "transit"
-    for text in ["Home added to your plan", "Homes you’re comparing", "Schools:", "No verified school data source", "checked Sep 23", "leaving 8:30"]:
+    for text in ["Home added to your plan", "Homes you’re comparing", "Schools:", "No verified school data source", "checked Sep 23"]:
         assert text in response.text, text
 
 
