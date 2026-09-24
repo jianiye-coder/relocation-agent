@@ -14,10 +14,10 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 from pydantic_ai.usage import UsageLimits
 
-from .. import geo, home, photo_inventory
+from .. import geo, home, photo_inventory, voice_intake
 from ..agent import AgentDeps, build_model, fill_derived, model_configured, moving_agent, pick_model, run_without_llm, trace
 from ..models import HomeSize, Intake
 from ..adapters import QuoteCache, RegistrySource, default_registry
@@ -107,6 +107,19 @@ def intake_form(request: Request):
 
 
 # ---- address lookup ----
+
+class VoiceAutofillRequest(BaseModel):
+    transcript: str
+
+
+@app.post("/api/intake/voice-autofill")
+async def voice_autofill(payload: VoiceAutofillRequest):
+    """Return user-reviewable form values extracted from a browser voice transcript."""
+    try:
+        fields = await voice_intake.extract(payload.transcript, pick_model())
+    except voice_intake.VoiceIntakeError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"fields": fields.model_dump(mode="json", exclude_none=True)}
 
 @app.get("/api/geo/place")
 def api_place(address: str):
