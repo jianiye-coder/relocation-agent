@@ -40,7 +40,7 @@ Set only your preferred LLM key. If several are set, selection priority is Flatk
 | `WARP_PRODUCTION_API_KEY` | Optional local storage only; the application does not read or switch to it. |
 | `QUOTE_CACHE=off` | Disable quote cache, useful for isolated verification. |
 
-There is no implemented FCC or NREL/OpenEI address-level adapter. Do not add a `BROADBAND_API_KEY` or assume that an NREL key enables utility lookup. Internet and electricity currently report unavailable. Schools and crime scoring are not implemented.
+There is no implemented FCC or NREL/OpenEI address-level adapter. Do not add a `BROADBAND_API_KEY` or assume that an NREL key enables utility lookup. Internet, electricity and schools currently report unavailable on each candidate home (PR #9). Crime scoring is not implemented.
 
 Delivery configuration and standalone scripts remain in the repository for future work, but the MVP web app and agent cannot draft, approve, or send quote-request emails. Do not run standalone delivery scripts during demo verification.
 
