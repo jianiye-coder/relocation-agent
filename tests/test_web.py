@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from moving_agent.web import app as web
@@ -40,3 +41,22 @@ def test_candidate_home_intake_survives_the_plan_session(intake, monkeypatch):
     assert saved.candidate_addresses == ["1 Main St, San Francisco, CA", "2 Oak St, San Francisco, CA"]
     assert saved.commute_destination == "1 Market St, San Francisco, CA"
     assert saved.commute_mode == "transit" and saved.commute_departure_time == "08:30"
+
+
+@pytest.mark.parametrize("field,value,message", [
+    ("candidate_addresses", "1 Main St\n2 Oak St\n3 Pine St", "Add at most two candidate homes"),
+    ("commute_mode", "teleport", "Choose drive, transit, walk or bicycle"),
+    ("commute_departure_time", "8:30am", "Use a 24-hour time like 08:30"),
+    ("commute_departure_time", "25:00", "Use a 24-hour time like 08:30"),
+])
+def test_candidate_home_input_errors_are_readable(intake, field, value, message):
+    response = TestClient(web.app).post("/plan", data=form(intake, **{field: value}))
+    assert response.status_code == 422
+    assert message in response.text
+    assert "List should have at most" not in response.text  # no raw validator text
+    assert "String should match pattern" not in response.text
+
+
+def test_two_candidate_homes_and_blank_lines_are_fine(intake):
+    response = TestClient(web.app).post("/plan", data=form(intake, candidate_addresses="\n1 Main St\n\n2 Oak St\n"))
+    assert response.status_code == 200

@@ -61,6 +61,19 @@ async def ensure_sid(request: Request, call_next):
     return response
 
 
+# Plain-language messages for fields whose raw validator text would confuse users.
+FIELD_MESSAGES = {
+    "candidate_addresses": "Add at most two candidate homes, one address per line.",
+    "commute_mode": "Choose drive, transit, walk or bicycle for the commute.",
+    "commute_departure_time": "Use a 24-hour time like 08:30 for when you leave.",
+}
+
+
+def _readable(error: dict) -> str:
+    field = str(error["loc"][0]) if error.get("loc") else ""
+    return FIELD_MESSAGES.get(field) or f"{'.'.join(str(p) for p in error['loc'])}: {error['msg']}"
+
+
 def _form_context(errors: list[str]) -> dict:
     return {"home_sizes": [h.value for h in HomeSize], "errors": errors, "today": date.today().isoformat()}
 
@@ -196,7 +209,7 @@ async def plan(
         )
     except (ValidationError, ValueError) as exc:
         errs = exc.errors() if isinstance(exc, ValidationError) else [{"loc": ("form",), "msg": str(exc)}]
-        errors = geo_errors + [f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}" for e in errs]
+        errors = geo_errors + [_readable(e) for e in errs]
         return templates.TemplateResponse(request, "intake.html", _form_context(errors), status_code=422)
 
     inventory = None
