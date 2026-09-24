@@ -1,8 +1,10 @@
 """The adapter contract, the registry (cache, errors, opt-in) and each adapter."""
 
 import asyncio
+import re
 import json
 from datetime import date, timedelta
+from math import ceil
 from pathlib import Path
 
 import httpx
@@ -44,7 +46,7 @@ def test_metadata_is_complete(adapter):
         assert not m.enabled_by_default
 
 
-@pytest.mark.parametrize("adapter", [a for a in ALL_QUOTE_ADAPTERS if not a.metadata.auth_env], ids=lambda a: a.metadata.id)
+@pytest.mark.parametrize("adapter", [a for a in ALL_QUOTE_ADAPTERS if a.metadata.source_kind in (SourceKind.sample, SourceKind.public_data)], ids=lambda a: a.metadata.id)
 def test_every_quote_carries_source_timestamp_confidence(adapter):
     quotes = asyncio.run(adapter.fetch_quotes(la_to_sf()))
     assert quotes
@@ -107,6 +109,77 @@ def test_failures_map_to_shared_error_codes(exc, code):
     a.fail_with = exc
     result = asyncio.run(Registry([a]).quotes(la_to_sf()))[0]
     assert result.error == code and not result.quotes
+
+
+WARP_RESPONSE = {
+    "quote_id": "PRICING_123", "mode": "ltl", "price_usd": 247.50,
+    "currency": "USD", "transit_days": 2, "pickup_date": "2026-10-14",
+    "delivery_date": "2026-10-16", "expires_at": "2026-10-12T15:30:00Z",
+    "quote_tier": "firm",
+}
+
+
+def _warp_quote(monkeypatch, key):
+    monkeypatch.setenv("WARP_API_KEY", key)
+    captured = {}
+
+    def handler(request):
+        captured["headers"] = dict(request.headers)
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json=WARP_RESPONSE)
+
+    req = la_to_sf(move_date=date(2026, 10, 14), volume_cuft=121, weight_lbs=1_001)
+    adapter = WarpLTLAdapter(client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    return asyncio.run(adapter.fetch_quotes(req))[0], captured
+
+
+def test_warp_quote_maps_the_documented_request_and_response(monkeypatch):
+    quote, captured = _warp_quote(monkeypatch, "wak_live_123")
+    assert captured["body"] == {
+        "origin_zip": "90012", "destination_zip": "94110", "pickup_date": "2026-10-14",
+        "pallets": ceil(121 / 60), "weight_lbs_per_pallet": ceil(1_001 / ceil(121 / 60)),
+        "commodity": "household goods", "length_in": 48, "width_in": 40, "height_in": 48,
+    }
+    assert captured["headers"]["authorization"] == "Bearer wak_live_123"
+    assert quote.price_usd == 247.50 and quote.valid_until and quote.available_on == date(2026, 10, 14)
+    assert "PRICING_123" in quote.price_basis and quote.source.endswith("/api/v1/ltl/quote")
+
+
+def test_warp_production_quote_is_firm_but_states_our_assumptions(monkeypatch):
+    """Warp's price is real, but our pallet conversion and household/residential fit are assumptions."""
+    quote, _ = _warp_quote(monkeypatch, "wak_live_123")
+    assert quote.price_kind == PriceKind.firm_quote and quote.confidence <= 0.6
+    for caveat in ("60 cu ft", "48 × 40 × 48", "residential", "household"):
+        assert caveat in quote.price_basis, caveat
+    assert "sandbox" not in quote.price_basis.lower()
+
+
+@pytest.mark.parametrize("key", ["wak_test_abc", "wak_test"])
+def test_warp_sandbox_key_is_labeled_mock_data(monkeypatch, key):
+    """A test key returns mock data; it must never look like a real price."""
+    quote, _ = _warp_quote(monkeypatch, key)
+    assert quote.price_kind == PriceKind.sample and quote.confidence <= 0.3
+    assert "sandbox" in quote.title.lower() and "mock data" in quote.price_basis.lower()
+    assert not re.search(r"\blive\b", quote.price_basis, re.I)
+
+
+@pytest.mark.parametrize("status,code", [
+    (401, ErrorCode.blocked), (429, ErrorCode.rate_limited), (400, ErrorCode.invalid_request), (503, ErrorCode.unavailable),
+])
+def test_warp_failures_are_typed(monkeypatch, status, code):
+    monkeypatch.setenv("WARP_API_KEY", "wak_test")
+    adapter = WarpLTLAdapter(client=httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(status))))
+    with pytest.raises(AdapterError) as error:
+        asyncio.run(adapter.fetch_quotes(la_to_sf()))
+    assert error.value.code == code
+
+
+def test_warp_rejects_invalid_response(monkeypatch):
+    monkeypatch.setenv("WARP_API_KEY", "wak_test")
+    adapter = WarpLTLAdapter(client=httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json={"quote_id": "q"}))))
+    with pytest.raises(AdapterError, match="invalid") as error:
+        asyncio.run(adapter.fetch_quotes(la_to_sf()))
+    assert error.value.code == ErrorCode.unavailable
 
 
 def test_missing_auth_and_no_coverage():
