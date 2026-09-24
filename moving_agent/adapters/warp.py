@@ -47,7 +47,7 @@ class WarpLTLAdapter(QuoteAdapter):
         service_types=[ServiceType.ltl_freight],
         coverage=["US"],
         auth="api_key",
-        auth_env=["WARP_API_KEY"],
+        auth_env=["WARP_MODE", "WARP_API_KEY", "WARP_PRODUCTION_API_KEY"],
         rate_limit=RateLimit(requests=60, per_seconds=60),
         source_kind=SourceKind.official_api,
         cache_ttl_seconds=2 * 3600,
@@ -59,9 +59,13 @@ class WarpLTLAdapter(QuoteAdapter):
         self.quote_url = quote_url
 
     async def fetch_quotes(self, req: MoveRequest) -> list[Quote]:
-        key = os.getenv("WARP_API_KEY")
+        mode = os.getenv("WARP_MODE", "sandbox").strip().lower()
+        if mode not in {"sandbox", "production"}:
+            raise AdapterError(ErrorCode.invalid_request, "WARP_MODE must be sandbox or production")
+        key_env = "WARP_PRODUCTION_API_KEY" if mode == "production" else "WARP_API_KEY"
+        key = os.getenv(key_env, "").strip()
         if not key:
-            raise AdapterError(ErrorCode.auth_missing, "set WARP_API_KEY")
+            raise AdapterError(ErrorCode.auth_missing, f"set {key_env} for WARP_MODE={mode}")
         if req.volume_cuft <= 0 or req.weight_lbs <= 0:
             raise AdapterError(ErrorCode.invalid_request, "Warp needs a positive inventory volume and weight")
 

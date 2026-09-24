@@ -37,8 +37,9 @@ Set only your preferred LLM key. If several are set, selection priority is Flatk
 | `GOOGLE_MAPS_API_KEY` | Google geocoding/distance and candidate commute. Move geocoding/distance can fall back to Census/OSRM; candidate commute reports unavailable. |
 | None | The Find a home page retrieves active rentals and photos from Realtor.com through [HomeHarvest](https://github.com/ZacharyHampton/HomeHarvest). It is an unofficial scrape, so availability can change and searches may be rate-limited; never treat its results as an MLS feed. |
 | `FMCSA_WEB_KEY` | Carrier lookup. Missing credentials produce a typed unavailable/auth state. |
-| `WARP_API_KEY` | Active key for PR #7. Sandbox keys return mock data; live keys request real quotes. No booking is called. |
-| `WARP_PRODUCTION_API_KEY` | Optional local storage only; the application does not read or switch to it. |
+| `WARP_MODE` | `sandbox` (default) or `production`; production must be selected explicitly. No booking is called. |
+| `WARP_API_KEY` | Sandbox credential used when `WARP_MODE=sandbox`; `wak_test_` quotes are mock data. |
+| `WARP_PRODUCTION_API_KEY` | Live credential used only when `WARP_MODE=production`; quote assumptions remain labeled. |
 | `QUOTE_CACHE=off` | Disable quote cache, useful for isolated verification. |
 
 There is no implemented FCC or NREL/OpenEI address-level adapter. Do not add a `BROADBAND_API_KEY` or assume that an NREL key enables utility lookup. Internet, electricity and schools currently report unavailable on each candidate home (PR #9). Crime scoring is not implemented.

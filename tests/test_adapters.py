@@ -163,6 +163,27 @@ def test_warp_sandbox_key_is_labeled_mock_data(monkeypatch, key):
     assert not re.search(r"\blive\b", quote.price_basis, re.I)
 
 
+def test_warp_production_mode_selects_production_key(monkeypatch):
+    monkeypatch.setenv("WARP_MODE", "production")
+    monkeypatch.setenv("WARP_API_KEY", "wak_test_should_not_be_used")
+    monkeypatch.setenv("WARP_PRODUCTION_API_KEY", "wak_live_selected")
+    captured = {}
+
+    def handler(request):
+        captured["authorization"] = request.headers["authorization"]
+        return httpx.Response(200, json=WARP_RESPONSE)
+
+    adapter = WarpLTLAdapter(client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    asyncio.run(adapter.fetch_quotes(la_to_sf()))
+    assert captured["authorization"] == "Bearer wak_live_selected"
+
+
+def test_warp_rejects_unknown_mode(monkeypatch):
+    monkeypatch.setenv("WARP_MODE", "live-ish")
+    with pytest.raises(AdapterError, match="WARP_MODE"):
+        asyncio.run(WarpLTLAdapter().fetch_quotes(la_to_sf()))
+
+
 @pytest.mark.parametrize("status,code", [
     (401, ErrorCode.blocked), (429, ErrorCode.rate_limited), (400, ErrorCode.invalid_request), (503, ErrorCode.unavailable),
 ])
