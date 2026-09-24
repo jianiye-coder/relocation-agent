@@ -44,6 +44,7 @@ def test_scripted_run_end_to_end():
     from evals.evaluators import ALL
     from evals.run import make_task
 
-    report = Dataset(name="smoke", cases=CASES[:1], evaluators=ALL).evaluate_sync(make_task("scripted"), progress=False)
+    report = Dataset(name="smoke", cases=CASES, evaluators=ALL).evaluate_sync(make_task("scripted"), progress=False)
     assert not report.failures
-    assert all(a.value for a in report.cases[0].assertions.values())
+    assert len(report.cases) == len(CASES)
+    assert all(a.value for case in report.cases for a in case.assertions.values())

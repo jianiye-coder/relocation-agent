@@ -55,6 +55,10 @@ class Intake(BaseModel):
     vehicles: list[Literal["car", "suv", "truck", "motorcycle"]] = Field(default_factory=list)
     lease_end: date | None = None
     monthly_rent: int | None = Field(default=None, ge=0, description="Expected rent at the new place")
+    candidate_addresses: list[str] = Field(default_factory=list, max_length=2)
+    commute_destination: str = ""
+    commute_mode: Literal["drive", "transit", "walk", "bicycle"] = "drive"
+    commute_departure_time: str = Field(default="", pattern=r"^$|^([01]\d|2[0-3]):[0-5]\d$")
     inventory_text: str = Field(default="", description="Rooms or items, one per line; overrides the home-size estimate")
     weight_lbs: int | None = None
 
