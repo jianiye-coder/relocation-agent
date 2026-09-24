@@ -291,6 +291,17 @@ def _session(rid: str, request: Request) -> Session:
 
 @app.get("/plan/{rid}", response_class=HTMLResponse)
 def show_plan(request: Request, rid: str):
+    return _render_plan(request, rid, "overview")
+
+
+@app.get("/plan/{rid}/{view}", response_class=HTMLResponse)
+def show_plan_step(request: Request, rid: str, view: str):
+    if view not in {"home", "sell", "timeline"}:
+        raise HTTPException(404, "Plan step not found.")
+    return _render_plan(request, rid, view)
+
+
+def _render_plan(request: Request, rid: str, view: str):
     s = _session(rid, request)
     d = s.deps
     plans = d.plans
@@ -298,7 +309,7 @@ def show_plan(request: Request, rid: str):
         plans = [plans[d.chosen]] + [p for i, p in enumerate(plans) if i != d.chosen]
     move_day = plans[0].move_date if plans else d.intake.move_date
     return templates.TemplateResponse(request, "plan.html", {
-        "rid": rid, "s": s, "intake": d.intake, "plans": plans, "listings": d.listings,
+        "rid": rid, "view": view, "s": s, "intake": d.intake, "plans": plans, "listings": d.listings,
         "options": option_views(plans, d.intake.budget_usd, d.intake.move_date),
         "tl": timeline_view(d.timeline, move_day) if d.timeline else None,
         "steps": trace(s.history),
@@ -445,7 +456,7 @@ def select_candidate_home(request: Request, rid: str, address: str = Form(...), 
     s.intake = updated
     s.deps.intake = updated
     s.deps.home_results = _candidate_home_results(updated)
-    return RedirectResponse(f"/plan/{rid}?home_selected=1", status_code=303)
+    return RedirectResponse(f"/plan/{rid}/home?home_selected=1", status_code=303)
 
 
 @app.post("/listing-check", response_class=HTMLResponse)

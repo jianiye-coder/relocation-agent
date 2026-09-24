@@ -2,10 +2,11 @@
 {% block title %}Your moving plan{% endblock %}
 {% block content %}
 <h1>Your moving plan</h1>
-<p class="lead">
-  {% if s.summary %}{{ s.summary|plain }}
-  {% else %}Here's what we found.{% endif %}
-</p>
+{% if view == "overview" %}
+<p class="lead">Your move, organized into three steps. Review your new home, finish your second-hand listings, then use the timeline to act.</p>
+{% else %}
+<p class="lead">{{ "Choose the move services and home details you want to carry forward." if view == "home" else "Review what you are taking, selling, and leaving behind." if view == "sell" else "Your action plan, planned backward from move day." }}</p>
+{% endif %}
 <p class="muted">{{ intake.from_address or intake.from_zip }} → {{ intake.to_address or intake.to_zip }}</p>
 
 {% if s.error %}<div class="errors" role="alert">{{ s.error }}</div>{% endif %}
@@ -14,6 +15,22 @@
 {% if not plans %}
 <div class="errors">No combination covers everything you asked for. {% if s.used_llm %}Ask the agent below to try something else, or {% endif %}<a href="/">start over</a>.</div>
 {% endif %}
+{% if view == "overview" %}
+<ol class="plan-steps" aria-label="Plan steps">
+  <li class="plan-step is-current"><span class="plan-step-num">1</span><div><span class="eyebrow">Start here</span><h2>New home</h2><p>Compare services, costs, and the home options you want to keep.</p><a class="btn btn-primary btn-sm" href="/plan/{{ rid }}/home">Review new home</a></div></li>
+  <li class="plan-step"><span class="plan-step-num">2</span><div><span class="eyebrow">Next</span><h2>Sell second-hand</h2><p>Check what you are moving and review the listings drafted for items you want to sell.</p><a class="btn btn-secondary btn-sm" href="/plan/{{ rid }}/sell">Review items and listings</a></div></li>
+  <li class="plan-step"><span class="plan-step-num">3</span><div><span class="eyebrow">Final step</span><h2>Timeline</h2><p>Once your choices are set, get a day-by-day plan for booking, packing, and moving.</p><a class="btn btn-secondary btn-sm" href="/plan/{{ rid }}/timeline">Open timeline</a></div></li>
+</ol>
+<section class="block plan-at-a-glance" aria-labelledby="glance-h">
+  <h2 id="glance-h">At a glance</h2>
+  <div class="glance-grid">
+    <div><span class="eyebrow">New home</span><strong>Options and costs</strong><p>What you're moving, Special items, ship or drive, one-way costs, True cost, Security deposit, and provider confidence.</p><a href="/plan/{{ rid }}/home">View details</a></div>
+    <div><span class="eyebrow">Sell second-hand</span><strong>Items and listings</strong><p>What you're moving and the listings drafted for you.</p><a href="/plan/{{ rid }}/sell">View details</a></div>
+    <div><span class="eyebrow">Final step</span><strong>Timeline</strong><a href="/plan/{{ rid }}/timeline">View details</a></div>
+  </div>
+</section>
+{% else %}
+{% if view == "home" %}
 {% if options %}
 <section class="options" aria-labelledby="options-h">
   <h2 id="options-h">Your options</h2>
@@ -89,7 +106,9 @@
 {% endif %}
 <p class="muted">Sample prices are illustrative until live provider adapters are connected.
 {% for e in adapter_errors %}<br>{{ e.adapter_id }}: {{ e.error.value }}{% if e.message %} ({{ e.message }}){% endif %}{% endfor %}</p>
+{% endif %}
 
+{% if view == "sell" %}
 {% if inventory %}
 <section class="block">
   <h2>What you're moving</h2>
@@ -102,7 +121,9 @@
   <p class="muted">{{ inventory.basis }}</p>
 </section>
 {% endif %}
+{% endif %}
 
+{% if view == "home" %}
 {% if vehicle_options %}
 <section class="block">
   <h2>Your vehicle: ship or drive?</h2>
@@ -120,11 +141,13 @@
   {% for l in true_cost.lines %}
   <div class="line"><div>{{ l.item }}</div><div class="price">${{ "{:,.2f}".format(l.amount_usd) }}</div><div class="how muted">{{ l.basis }} <span class="tag">{{ l.kind }}</span></div></div>
   {% endfor %}
-  {% if not intake.monthly_rent %}<p class="muted">Add your expected rent on the form to include the deposit and first month.</p>{% endif %}
+{% if not intake.monthly_rent %}<p class="muted">Add your expected rent on the form to include the deposit and first month.</p>{% endif %}
 </section>
+{% endif %}
 {% endif %}
 
 {% if tl %}
+{% if view == "timeline" %}
 <section class="block timeline" aria-labelledby="tl-h">
   <h2 id="tl-h">Timeline</h2>
   <p class="muted section-lead">Planned backward from move day, <strong>{{ tl.move_day }}</strong>{% if tl.days_left > 0 %} ({{ tl.days_left }} day{{ "s" if tl.days_left != 1 }} away){% endif %}.{% if tl.overdue %} <span class="warn-text">{{ tl.overdue }} step{{ "s" if tl.overdue != 1 }} should already be done.</span>{% endif %}</p>
@@ -152,7 +175,9 @@
   </ol>
 </section>
 {% endif %}
+{% endif %}
 
+{% if view == "sell" %}
 {% if listing_checks %}
 <section class="block">
   <h2>Listings you asked about</h2>
@@ -211,11 +236,20 @@
   {% endfor %}
 </section>
 {% endif %}
+{% endif %}
+{% if view == "home" %}
 {% if home_selected %}<p class="success" role="status">Home added to your plan. We updated its decision data below.</p>{% endif %}
 {% if home_results %}<section class="block"><h2>Homes you’re comparing</h2>{% for home in home_results %}<div class="card"><h3>{{ home.address }}</h3>
 <p class="muted">Commute: {% if home.commute.available %}{{ home.commute.minutes }} min · {{ home.commute.miles }} mi{% if home.commute.departure %} · leaving {{ home.commute.departure|clock }}{% endif %}{% else %}{{ home.commute.message }}{% endif %} · {{ home.commute.source }}{% if home.commute.fetched_at %} · checked {{ home.commute.fetched_at|checked }}{% endif %}</p>
 <p class="muted">Schools: {{ home.schools.message }} · {{ home.schools.source }}</p>
 <p class="muted">Internet: {{ home.utilities.broadband.message }} · {{ home.utilities.broadband.source }}</p>
 <p class="muted">Electricity: {{ home.utilities.electricity.message }} · {{ home.utilities.electricity.source }}</p></div>{% endfor %}</section>{% endif %}
-<div class="actions"><a class="btn btn-secondary" href="/housing?location={{ intake.to_zip }}&rid={{ rid }}">Find a home in {{ intake.to_zip }}</a><a class="btn btn-secondary" href="/">Start over</a></div>
+{% endif %}
+<div class="actions">
+  {% if view == "overview" %}<a class="btn btn-secondary" href="/">Start over</a>
+  {% elif view == "home" %}<a class="btn btn-primary" href="/plan/{{ rid }}/sell">Next: sell second-hand</a><a class="btn btn-secondary" href="/housing?location={{ intake.to_zip }}&rid={{ rid }}">Find a home in {{ intake.to_zip }}</a>
+  {% elif view == "sell" %}<a class="btn btn-primary" href="/plan/{{ rid }}/timeline">Next: build timeline</a><a class="btn btn-secondary" href="/plan/{{ rid }}/home">Back: new home</a>
+  {% else %}<a class="btn btn-secondary" href="/plan/{{ rid }}/sell">Back: sell second-hand</a><a class="btn btn-secondary" href="/plan/{{ rid }}/home">Back: new home</a>{% endif %}
+</div>
+{% endif %}
 {% endblock %}

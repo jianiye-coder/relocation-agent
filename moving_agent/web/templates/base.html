@@ -111,6 +111,19 @@
   .account-bar form { margin: 0; }
   .link-btn { background: none; border: 0; padding: 0; font: 500 14px var(--font); color: var(--ink); text-decoration: underline; cursor: pointer; }
   .btn-sm { height: 40px; padding: 8px 16px; font-size: 14px; }
+  .plan-steps { list-style: none; padding: 0; margin: 28px 0 0; display: grid; gap: 12px; counter-reset: plan-step; }
+  .plan-step { display: grid; grid-template-columns: 40px 1fr; gap: 16px; padding: 20px; border: 1px solid var(--hairline); border-radius: var(--r-md); background: var(--canvas); }
+  .plan-step.is-current { border-color: var(--ink); box-shadow: var(--shadow); }
+  .plan-step-num { width: 32px; height: 32px; border-radius: var(--r-full); background: var(--surface-strong); display: grid; place-items: center; font-weight: 600; }
+  .plan-step h2 { margin: 2px 0 4px; }
+  .plan-step p { margin: 0 0 14px; color: var(--body); }
+  .plan-at-a-glance { margin-top: 24px; }
+  .glance-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .glance-grid > div { display: flex; flex-direction: column; gap: 6px; padding: 16px; border: 1px solid var(--hairline); border-radius: var(--r-sm); }
+  .glance-grid strong { font-size: 16px; }
+  .glance-grid p { margin: 0; color: var(--body); font-size: 14px; line-height: 1.45; }
+  .glance-grid a { margin-top: auto; font-size: 14px; font-weight: 600; }
+  @media (max-width: 640px) { .glance-grid { grid-template-columns: 1fr; } }
   .approval { border: 2px solid var(--ink); }
   .approval .actions form { margin: 0; }
   details.email-card summary { cursor: pointer; font-size: 14px; }

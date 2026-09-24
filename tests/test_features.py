@@ -1,5 +1,6 @@
 """Inventory estimator, true cost, timeline and listing checks."""
 
+import re
 from datetime import date, timedelta
 
 from fastapi.testclient import TestClient
@@ -67,3 +68,19 @@ def test_plan_page_shows_inventory_vehicle_cost_timeline(intake):
     assert r.status_code == 200
     for text in ["What you're moving", "Special items", "ship or drive", "True cost", "Security deposit", "Timeline", "confidence"]:
         assert text in r.text, text
+
+
+def test_plan_steps_render_as_separate_pages(intake):
+    from moving_agent.web import app as web
+    from .test_web import form
+
+    client = TestClient(web.app)
+    r = client.post("/plan", data=form(intake, inventory_text="desk", items_to_sell="desk"))
+    rid = re.search(r"/plan/(\w+)", str(r.url)).group(1)
+    home = client.get(f"/plan/{rid}/home")
+    sell = client.get(f"/plan/{rid}/sell")
+    timeline_page = client.get(f"/plan/{rid}/timeline")
+    assert home.status_code == sell.status_code == timeline_page.status_code == 200
+    assert "Your options" in home.text and "Timeline" not in home.text
+    assert "What you're moving" in sell.text and "Listings for things you're selling" in sell.text
+    assert "Timeline" in timeline_page.text and "Your options" not in timeline_page.text
