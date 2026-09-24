@@ -105,3 +105,21 @@ def test_city_state_destination_uses_a_representative_zip_when_census_has_no_mat
     place = geo.geocode("Mountain View, CA")
     assert place.zip == "94040" and "city center" in place.matched_address
     assert any(url.startswith("https://api.zippopotam.us/us/CA/") for url in calls)
+
+
+def test_city_only_destination_uses_nominatim(monkeypatch):
+    def fake_get(url, **kwargs):
+        if url == geo.CENSUS_URL:
+            return FakeResponse({"result": {"addressMatches": []}})
+        if url == geo.NOMINATIM_URL:
+            return FakeResponse([{
+                "lat": "37.3229", "lon": "-122.0323",
+                "address": {"city": "Cupertino", "state": "California", "postcode": "95014"},
+            }])
+        raise AssertionError(url)
+
+    monkeypatch.delenv("GOOGLE_MAPS_API_KEY", raising=False)
+    monkeypatch.setattr(geo.httpx, "get", fake_get)
+    place = geo.geocode("Cupertino")
+    assert place.zip == "95014" and place.lat == pytest.approx(37.3229)
+    assert "Cupertino" in place.matched_address

@@ -16,6 +16,7 @@ import httpx
 from pydantic import BaseModel
 
 CENSUS_URL = "https://geocoding.geo.census.gov/geocoder/locations/onelineaddress"
+NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 OSRM_URL = "https://router.project-osrm.org/route/v1/driving/{a_lon},{a_lat};{b_lon},{b_lat}"
 ZIP_URL = "https://api.zippopotam.us/us/{zip}"
 CITY_URL = "https://api.zippopotam.us/us/{state}/{city}"
@@ -72,33 +73,45 @@ def _zip_only(zip_code: str) -> Place:
 
 
 def _city_only(location: str) -> Place:
-    """Resolve ``City, ST`` to an exact city match and its first ZIP center.
-
-    This intentionally avoids guessing for broad labels (for example, "East
-    Bay"). Those labels need a city or neighborhood before a move quote can
-    usefully estimate a driving route.
-    """
+    """Resolve a city with or without a state to a representative ZIP center."""
     match = re.fullmatch(r"\s*(.+?)\s*,\s*([A-Za-z]{2})\s*", location)
-    if not match:
-        raise GeoError("We couldn't resolve that area. Add a city and state, for example Mountain View, CA.")
-    city, state = match.groups()
-    r = httpx.get(
-        CITY_URL.format(state=state.upper(), city=city),
-        timeout=TIMEOUT,
-    )
-    if r.status_code == 404:
-        raise GeoError("We couldn't resolve that area. Add a city and state, for example Mountain View, CA.")
-    r.raise_for_status()
-    places = r.json().get("places", [])
-    exact = next((p for p in places if p.get("place name", "").casefold() == city.casefold()), None)
-    if not exact:
-        raise GeoError("We couldn't resolve that area. Add a city and state, for example Mountain View, CA.")
-    zip_code = exact["post code"]
+    if match:
+        city, state = match.groups()
+        r = httpx.get(CITY_URL.format(state=state.upper(), city=city), timeout=TIMEOUT)
+        if r.status_code == 404:
+            raise GeoError("We couldn't resolve that area. Try a city name, city and state, or ZIP.")
+        r.raise_for_status()
+        places = r.json().get("places", [])
+        exact = next((p for p in places if p.get("place name", "").casefold() == city.casefold()), None)
+        if not exact:
+            raise GeoError("We couldn't resolve that area. Try a city name, city and state, or ZIP.")
+        zip_code = exact["post code"]
+        return Place(
+            matched_address=f"{exact['place name']}, {state.upper()} {zip_code} (city center)",
+            zip=zip_code, lat=float(exact["latitude"]), lon=float(exact["longitude"]),
+        )
+
+    try:
+        r = httpx.get(
+            NOMINATIM_URL,
+            params={"q": f"{location}, USA", "format": "jsonv2", "addressdetails": 1, "limit": 1, "countrycodes": "us"},
+            headers={"User-Agent": "relocation-agent/1.0 (area lookup)"}, timeout=TIMEOUT,
+        )
+        r.raise_for_status()
+        payload = r.json()
+        results = payload if isinstance(payload, list) else []
+    except (httpx.HTTPError, ValueError, TypeError):
+        results = []
+    result = next((item for item in results if item.get("address", {}).get("postcode")), None)
+    if not result:
+        raise GeoError("We couldn't resolve that area. Try a city name, city and state, or ZIP.")
+    address = result["address"]
+    name = address.get("city") or address.get("town") or address.get("village") or location
+    state = address.get("state")
+    zip_code = address["postcode"].split("-")[0]
     return Place(
-        matched_address=f"{exact['place name']}, {state.upper()} {zip_code} (city center)",
-        zip=zip_code,
-        lat=float(exact["latitude"]),
-        lon=float(exact["longitude"]),
+        matched_address=f"{name}, {state + ' ' if state else ''}{zip_code} (city center)",
+        zip=zip_code, lat=float(result["lat"]), lon=float(result["lon"]),
     )
 
 

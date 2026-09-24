@@ -53,8 +53,10 @@ def test_storage_priced_for_months(intake):
     offers = gather_offers(storing, [catalog])["storage"]
     assert offers
     extra = next(o for o in offers if o.provider == "Extra Space Storage")
+    public = next(o for o in offers if o.provider == "Public Storage")
     # 5x10 at $79: first month 50% off, then 2 full months.
     assert extra.price_usd == round(79 * 0.5 + 79 * 2, 2)
+    assert public.price_usd == 129 * 3
 
 
 def test_long_distance_uses_one_way_pricing(intake):

@@ -16,7 +16,7 @@
   "storage": [
     {"provider": "Extra Space Storage", "title": "5x5 unit", "capacity_cuft": 200, "monthly": 45, "first_month_discount": 0.5, "rating": 4.4, "contact_email": "store0421@extraspace.example", "contact_url": "https://www.extraspace.com/"},
     {"provider": "Extra Space Storage", "title": "5x10 unit", "capacity_cuft": 400, "monthly": 79, "first_month_discount": 0.5, "rating": 4.4, "contact_email": "store0421@extraspace.example", "contact_url": "https://www.extraspace.com/"},
-    {"provider": "Public Storage", "title": "10x10 unit", "capacity_cuft": 800, "monthly": 129, "first_month_discount": 0.99, "rating": 4.2, "contact_email": "rentals@publicstorage.example", "contact_url": "https://www.publicstorage.com/"},
+    {"provider": "Public Storage", "title": "10x10 unit", "capacity_cuft": 800, "monthly": 129, "first_month_discount": 0.0, "rating": 4.2, "contact_email": "rentals@publicstorage.example", "contact_url": "https://www.publicstorage.com/"},
     {"provider": "CubeSmart", "title": "10x15 unit", "capacity_cuft": 1200, "monthly": 175, "first_month_discount": 0.0, "rating": 4.3, "contact_email": "store@cubesmart.example", "contact_url": "https://www.cubesmart.com/"}
   ],
   "containers": [

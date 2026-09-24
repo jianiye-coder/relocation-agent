@@ -20,7 +20,7 @@ from pydantic_ai.usage import UsageLimits
 from .. import geo, home, photo_inventory
 from ..agent import AgentDeps, build_model, fill_derived, model_configured, moving_agent, pick_model, run_without_llm, trace
 from ..models import HomeSize, Intake
-from ..adapters import QuoteCache, RegistrySource, default_registry
+from ..adapters import AdapterError, ErrorCode, FMCSAAdapter, QuoteCache, RegistrySource, default_registry
 from ..inventory import estimate as estimate_inventory
 from ..listings import check as check_listing_rules
 from .views import option_views, timeline_view
@@ -291,6 +291,17 @@ def _session(rid: str, request: Request) -> Session:
 
 @app.get("/plan/{rid}", response_class=HTMLResponse)
 def show_plan(request: Request, rid: str):
+    return _render_plan(request, rid, "overview")
+
+
+@app.get("/plan/{rid}/{view}", response_class=HTMLResponse)
+def show_plan_step(request: Request, rid: str, view: str):
+    if view not in {"home", "sell", "timeline"}:
+        raise HTTPException(404, "Plan step not found.")
+    return _render_plan(request, rid, view)
+
+
+def _render_plan(request: Request, rid: str, view: str):
     s = _session(rid, request)
     d = s.deps
     plans = d.plans
@@ -298,7 +309,7 @@ def show_plan(request: Request, rid: str):
         plans = [plans[d.chosen]] + [p for i, p in enumerate(plans) if i != d.chosen]
     move_day = plans[0].move_date if plans else d.intake.move_date
     return templates.TemplateResponse(request, "plan.html", {
-        "rid": rid, "s": s, "intake": d.intake, "plans": plans, "listings": d.listings,
+        "rid": rid, "view": view, "s": s, "intake": d.intake, "plans": plans, "listings": d.listings,
         "options": option_views(plans, d.intake.budget_usd, d.intake.move_date),
         "tl": timeline_view(d.timeline, move_day) if d.timeline else None,
         "steps": trace(s.history),
@@ -445,7 +456,7 @@ def select_candidate_home(request: Request, rid: str, address: str = Form(...), 
     s.intake = updated
     s.deps.intake = updated
     s.deps.home_results = _candidate_home_results(updated)
-    return RedirectResponse(f"/plan/{rid}?home_selected=1", status_code=303)
+    return RedirectResponse(f"/plan/{rid}/home?home_selected=1", status_code=303)
 
 
 @app.post("/listing-check", response_class=HTMLResponse)
@@ -454,3 +465,53 @@ def listing_check(request: Request, text: str = Form(...), price_usd: str = Form
                                  int(bedrooms) if bedrooms.strip() else None, address)
     return templates.TemplateResponse(request, "listing_check.html", {
         "result": result, "form": {"text": text, "price_usd": price_usd, "bedrooms": bedrooms, "address": address}})
+
+
+# ---- mover vetting ----
+
+def _mover_check_context(*, result=None, matches=None, error: str = "", name: str = "", usdot: str = "", mc: str = "") -> dict:
+    return {"result": result, "matches": matches or [], "error": error,
+            "form": {"name": name, "usdot": usdot, "mc": mc}}
+
+
+@app.get("/mover-check", response_class=HTMLResponse)
+def mover_check_form(request: Request):
+    return templates.TemplateResponse(request, "mover_check.html", _mover_check_context())
+
+
+@app.post("/mover-check", response_class=HTMLResponse)
+async def mover_check(request: Request, name: str = Form(""), usdot: str = Form(""), mc: str = Form("")):
+    """Look up a carrier by name or one identifier in FMCSA's QCMobile registry."""
+    name, usdot, mc = name.strip(), usdot.strip(), mc.strip()
+    if sum(bool(value) for value in (name, usdot, mc)) != 1:
+        return templates.TemplateResponse(
+            request, "mover_check.html",
+            _mover_check_context(error="Enter a company name, USDOT number, or MC number — one only.", name=name, usdot=usdot, mc=mc),
+            status_code=422,
+        )
+    if usdot and not usdot.isdigit():
+        return templates.TemplateResponse(
+            request, "mover_check.html",
+            _mover_check_context(error="USDOT numbers contain digits only.", name=name, usdot=usdot, mc=mc), status_code=422,
+        )
+    if mc and not any(char.isdigit() for char in mc):
+        return templates.TemplateResponse(
+            request, "mover_check.html",
+            _mover_check_context(error="Enter the digits from the MC number, for example MC-123456.", name=name, usdot=usdot, mc=mc), status_code=422,
+        )
+    try:
+        adapter = FMCSAAdapter()
+        if name:
+            matches = await adapter.search(name)
+            return templates.TemplateResponse(request, "mover_check.html", _mover_check_context(matches=matches, name=name))
+        result = await adapter.check(usdot=int(usdot) if usdot else None, mc=mc or None)
+    except AdapterError as exc:
+        message = (
+            "Add FMCSA_WEB_KEY to .env before checking live records."
+            if exc.code == ErrorCode.auth_missing else exc.message
+        )
+        return templates.TemplateResponse(
+            request, "mover_check.html",
+            _mover_check_context(error=f"FMCSA lookup unavailable: {message}", name=name, usdot=usdot, mc=mc), status_code=502,
+        )
+    return templates.TemplateResponse(request, "mover_check.html", _mover_check_context(result=result, usdot=usdot, mc=mc))

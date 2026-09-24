@@ -117,6 +117,7 @@ class CarrierCheck(BaseModel):
     query: str
     found: bool
     usdot_number: int | None = None
+    mc_number: int | None = None
     legal_name: str = ""
     dba_name: str = ""
     allowed_to_operate: bool | None = None

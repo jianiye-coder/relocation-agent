@@ -29,10 +29,81 @@ def test_intake_uses_a_destination_area_instead_of_asking_for_a_to_zip():
     assert '<label for="to_zip">' not in page
 
 
+def test_intake_explains_each_service_choice():
+    page = TestClient(web.app).get("/").text
+    for explanation in [
+        "I’ll drive and load it",
+        "Someone else handles the heavy lifting",
+        "I need a place to keep things",
+        "I’ll load it; the provider transports it",
+    ]:
+        assert explanation in page
+
+
+def test_intake_marks_new_floor_optional_and_keeps_notes_outside_selling_section():
+    page = TestClient(web.app).get("/").text
+    assert 'for="to_floor">New floor <span class="hint">· optional</span>' in page
+    selling_start = page.index("<h2>Selling before you move")
+    additional_start = page.index("<h2>Additional details")
+    selling_section = page[selling_start:additional_start]
+    assert 'for="notes"' not in selling_section
+    assert 'for="notes"' in page[additional_start:]
+
+
 def test_email_delivery_routes_are_not_registered():
     client = TestClient(web.app)
     for path in ["/send/nope", "/approve/nope", "/auth/google/start", "/auth/google/callback"]:
         assert client.post(path).status_code == 404
+
+
+def test_mover_check_shows_an_fmcsa_carrier_record(monkeypatch):
+    from datetime import datetime, timezone
+    from moving_agent.adapters.base import CarrierCheck
+
+    async def fake_check(self, usdot=None, mc=None):
+        assert usdot == 1234567 and mc is None
+        return CarrierCheck(adapter_id="fmcsa_qcmobile", query="USDOT 1234567", found=True, usdot_number=1234567,
+                            legal_name="EXAMPLE VAN LINES LLC", dba_name="Example Movers", allowed_to_operate=True,
+                            city="Chicago", state="IL", source="FMCSA", fetched_at=datetime.now(timezone.utc))
+
+    monkeypatch.setattr(web.FMCSAAdapter, "check", fake_check)
+    client = TestClient(web.app)
+    response = client.post("/mover-check", data={"usdot": "1234567"})
+    assert response.status_code == 200
+    for text in ["FMCSA record found", "Allowed to operate", "EXAMPLE VAN LINES LLC", "Example Movers", "1234567", "Chicago, IL"]:
+        assert text in response.text
+
+
+def test_mover_check_requires_exactly_one_identifier():
+    client = TestClient(web.app)
+    assert client.get("/mover-check").status_code == 200
+    response = client.post("/mover-check", data={"usdot": "123", "mc": "MC-456"})
+    assert response.status_code == 422 and "company name, USDOT number, or MC number" in response.text
+
+
+def test_mover_check_searches_by_company_name(monkeypatch):
+    from datetime import datetime, timezone
+    from moving_agent.adapters.base import CarrierCheck
+
+    async def fake_search(self, name):
+        assert name == "Bay Movers"
+        return [CarrierCheck(adapter_id="fmcsa_qcmobile", query="name Bay Movers", found=True, usdot_number=1234567,
+                             mc_number=987654, legal_name="BAY MOVERS LLC", dba_name="Bay Movers",
+                             allowed_to_operate=True, city="San Francisco", state="CA", source="FMCSA",
+                             fetched_at=datetime.now(timezone.utc))]
+
+    monkeypatch.setattr(web.FMCSAAdapter, "search", fake_search)
+    response = TestClient(web.app).post("/mover-check", data={"name": "Bay Movers"})
+    assert response.status_code == 200
+    for text in ["Choose the mover", "BAY MOVERS LLC", "USDOT 1234567", "MC 987654", "Use this mover"]:
+        assert text in response.text
+
+
+def test_mover_check_explains_missing_fmcsa_key(monkeypatch):
+    monkeypatch.delenv("FMCSA_WEB_KEY", raising=False)
+    response = TestClient(web.app).post("/mover-check", data={"mc": "MC-123456"})
+    assert response.status_code == 502
+    assert "Add FMCSA_WEB_KEY to .env" in response.text
 
 
 def test_candidate_home_controls_live_in_housing_not_intake(intake, monkeypatch):
