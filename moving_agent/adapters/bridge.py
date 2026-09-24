@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import threading
 import time
 
 from ..models import Intake, Offer
@@ -47,14 +48,19 @@ class RegistrySource:
     def __init__(self, registry: Registry):
         self.registry = registry
         self._last: dict[str, tuple[float, list[AdapterResult]]] = {}
+        self._lock = threading.Lock()  # tools call this from parallel threads
 
     def results(self, intake: Intake) -> list[AdapterResult]:
         key = request_from_intake(intake).model_dump_json()
-        hit = self._last.get(key)
-        if not hit or time.time() - hit[0] > self.MEMO_SECONDS:
+        with self._lock:
+            hit = self._last.get(key)
+        if hit and time.time() - hit[0] <= self.MEMO_SECONDS:
+            return hit[1]
+        fresh = (time.time(), run_sync(self.registry.quotes(request_from_intake(intake))))
+        with self._lock:
             self._last = {k: v for k, v in self._last.items() if time.time() - v[0] <= self.MEMO_SECONDS}
-            hit = self._last[key] = (time.time(), run_sync(self.registry.quotes(request_from_intake(intake))))
-        return hit[1]
+            self._last[key] = fresh
+        return fresh[1]
 
     def offers(self, intake: Intake, service: str) -> list[Offer]:
         wanted = SERVICE_TYPES[service]
