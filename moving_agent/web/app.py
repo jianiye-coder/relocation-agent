@@ -22,6 +22,7 @@ from ..models import HomeSize, Intake
 from ..adapters import QuoteCache, RegistrySource, default_registry
 from ..inventory import estimate as estimate_inventory
 from ..listings import check as check_listing_rules
+from .views import option_views, timeline_view
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
@@ -299,8 +300,11 @@ def show_plan(request: Request, rid: str):
     plans = d.plans
     if plans:
         plans = [plans[d.chosen]] + [p for i, p in enumerate(plans) if i != d.chosen]
+    move_day = plans[0].move_date if plans else d.intake.move_date
     return templates.TemplateResponse(request, "plan.html", {
         "rid": rid, "s": s, "intake": d.intake, "plans": plans, "listings": d.listings,
+        "options": option_views(plans, d.intake.budget_usd, d.intake.move_date),
+        "tl": timeline_view(d.timeline, move_day) if d.timeline else None,
         "steps": trace(s.history),
         "model": pick_model(), "inventory": d.inventory, "vehicle_options": d.vehicle_options,
         "true_cost": d.true_cost, "timeline": d.timeline, "listing_checks": d.listing_checks,

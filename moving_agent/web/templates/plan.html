@@ -14,25 +14,79 @@
 {% if not plans %}
 <div class="errors">No combination covers everything you asked for. {% if s.used_llm %}Ask the agent below to try something else, or {% endif %}<a href="/">start over</a>.</div>
 {% endif %}
-{% for plan in plans %}
-<div class="card{% if loop.first %} raised{% endif %}" id="plan-{{ loop.index0 }}">
-  <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap">
-    <h3>{{ "Recommended" if loop.first else "Option " ~ loop.index }}</h3>
-    {% if plan.within_budget %}<span class="badge">within budget</span>{% else %}<span class="badge warn">${{ "{:,.0f}".format(plan.over_budget_by) }} over budget</span>{% endif %}
+{% if options %}
+<section class="options" aria-labelledby="options-h">
+  <h2 id="options-h">Your options</h2>
+  <p class="muted section-lead">{{ options|length }} way{{ "s" if options|length != 1 }} to cover {{ intake.needs|map("replace", "labor", "movers")|join(", ") }} for {{ intake.from_zip }} → {{ intake.to_zip }}. Tap one to jump to its details.</p>
+
+  {% if options|length > 1 %}
+  <div class="compare" role="list">
+    {% for o in options %}
+    <a class="compare-tile{% if o.recommended %} is-rec{% endif %}" href="#{{ o.anchor }}" role="listitem">
+      <span class="eyebrow">{{ o.label }}</span>
+      <span class="compare-total">{{ o.total }}</span>
+      <span class="compare-delta{% if not o.within_budget %} warn{% endif %}">{% if o.recommended %}{{ "Within budget" if o.within_budget else "Over budget" }}{% else %}{{ o.delta }} vs. recommended{% endif %}</span>
+      <span class="compare-name">{{ o.name }}</span>
+    </a>
+    {% endfor %}
   </div>
-  <p style="margin:8px 0 4px"><span class="price-lg">${{ "{:,.0f}".format(plan.total_usd) }}</span> <span class="muted">total · {{ plan.move_date.strftime("%a %b") }} {{ plan.move_date.day }}</span></p>
-  <p class="muted" style="margin:0 0 12px">{{ plan.reason }}</p>
-  {% for o in plan.offers %}
-  <div class="line">
-    <div><div class="what">{{ o.provider }} · {{ o.title }}</div><div class="muted">{{ o.service|capitalize }}{% if o.rating %} · ★ {{ o.rating }}{% endif %}</div></div>
-    <div class="price">${{ "{:,.2f}".format(o.price_usd) }}</div>
-    <div class="how muted">{{ o.price_basis }}
-      <br><span class="tag">{{ o.price_kind or "estimate" }}</span> <span class="tag">confidence {{ "%.1f"|format(o.confidence or 0) }}</span>
-      <span>· {{ o.source }}{% if o.fetched_at %} · {{ o.fetched_at.strftime("%b %-d %H:%M") }} UTC{% endif %}</span></div>
-  </div>
+  {% endif %}
+
+  {% for o in options %}
+  <article class="option{% if o.recommended %} is-rec{% endif %}" id="{{ o.anchor }}">
+    <header class="option-head">
+      <div>
+        <span class="eyebrow">{{ o.label }}</span>
+        <h3 class="option-name">{{ o.name }}</h3>
+      </div>
+      <span class="budget-pill{% if not o.within_budget %} warn{% endif %}">{{ "Within budget" if o.within_budget else "Over budget" }}</span>
+    </header>
+
+    <dl class="option-stats">
+      <div class="stat"><dt>Total</dt><dd class="stat-value">{{ o.total }}</dd><dd class="stat-note{% if not o.within_budget %} warn{% endif %}">{{ o.budget_note }}</dd></div>
+      <div class="stat"><dt>Move day</dt><dd class="stat-value">{{ o.move_day }}</dd><dd class="stat-note">{{ o.date_note }}</dd></div>
+      <div class="stat"><dt>Rating</dt><dd class="stat-value">{% if o.rating %}★ {{ o.rating }}{% else %}—{% endif %}</dd><dd class="stat-note">average of providers</dd></div>
+    </dl>
+
+    {% if o.highlights %}<p class="highlights">{% for h in o.highlights %}<span class="hl">{{ h }}</span>{% endfor %}</p>{% endif %}
+
+    {% if o.tradeoffs %}
+    <div class="tradeoffs">
+      <h4>Compared with recommended</h4>
+      <ul>{% for t in o.tradeoffs %}<li>{{ t }}</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+
+    <div class="included">
+      <h4>What's included</h4>
+      <ul class="svc-list">
+        {% for i in o.included %}
+        <li class="svc">
+          <span class="svc-icon" aria-hidden="true">{% if i.service == "truck" %}<svg viewBox="0 0 24 24"><path d="M2 7h11v9H2zM13 10h4l3 3v3h-7z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="6" cy="17.5" r="1.8" fill="currentColor"/><circle cx="16.5" cy="17.5" r="1.8" fill="currentColor"/></svg>{% elif i.service == "labor" %}<svg viewBox="0 0 24 24"><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="16.5" cy="9" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M2.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5M13 18.5c.4-2.4 1.9-3.8 3.5-3.8S20 16 20.5 18.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>{% elif i.service == "storage" %}<svg viewBox="0 0 24 24"><path d="M3 9l9-5 9 5v11H3z M7 20v-7h10v7 M7 16h10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>{% else %}<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 6v12M13 6v12M18 6v12" stroke="currentColor" stroke-width="1.4"/></svg>{% endif %}</span>
+          <div class="svc-main">
+            <span class="svc-name">{{ i.provider }} · {{ i.title }}{% if i.different %} <span class="tag">different</span>{% endif %}</span>
+            <span class="svc-meta">{{ i.service_label }}{% if i.rating %} · ★ {{ i.rating }}{% endif %}</span>
+          </div>
+          <span class="svc-price">{{ i.price }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    <details class="howcalc">
+      <summary>How these prices were calculated</summary>
+      {% for i in o.included %}
+      <div class="calc">
+        <p class="calc-name">{{ i.service_label }} · {{ i.provider }}</p>
+        <p class="muted">{{ i.basis }}</p>
+        <p class="calc-tags"><span class="tag">{{ i.kind }}</span> <span class="tag">confidence {{ "%.1f"|format(i.confidence or 0) }}</span> <span class="muted">{{ i.source }}{% if i.fetched_at %} · {{ i.fetched_at.strftime("%b %-d %H:%M") }} UTC{% endif %}</span></p>
+      </div>
+      {% endfor %}
+    </details>
+  </article>
   {% endfor %}
-</div>
-{% endfor %}
+</section>
+{% endif %}
 <p class="muted">Sample prices are illustrative until live provider adapters are connected.
 {% for e in adapter_errors %}<br>{{ e.adapter_id }}: {{ e.error.value }}{% if e.message %} ({{ e.message }}){% endif %}{% endfor %}</p>
 
@@ -70,13 +124,32 @@
 </section>
 {% endif %}
 
-{% if timeline %}
-<section class="block">
-  <h2>Timeline</h2>
-  {% for t in timeline %}
-  <div class="line"><div><strong>{{ t.due.strftime("%a %b") }} {{ t.due.day }}</strong> · {{ t.title }}{% if t.overdue %} <span class="tag warn">overdue, do now</span>{% endif %}</div><div></div>
-    {% if t.detail or t.source %}<div class="how muted">{{ t.detail }}{% if t.source %} <a href="{{ t.source }}" target="_blank" rel="noopener">source</a>{% endif %}</div>{% endif %}</div>
-  {% endfor %}
+{% if tl %}
+<section class="block timeline" aria-labelledby="tl-h">
+  <h2 id="tl-h">Timeline</h2>
+  <p class="muted section-lead">Planned backward from move day, <strong>{{ tl.move_day }}</strong>{% if tl.days_left > 0 %} ({{ tl.days_left }} day{{ "s" if tl.days_left != 1 }} away){% endif %}.{% if tl.overdue %} <span class="warn-text">{{ tl.overdue }} step{{ "s" if tl.overdue != 1 }} should already be done.</span>{% endif %}</p>
+  <ol class="tl">
+    {% for phase in tl.phases %}
+    <li class="tl-phase">
+      <span class="tl-phase-title">{{ phase.title }}</span>{% if phase.subtitle %}<span class="tl-phase-sub">{{ phase.subtitle }}</span>{% endif %}
+    </li>
+    {% for item in phase["items"] %}
+      {% if item.kind == "today" %}
+      <li class="tl-today"><span class="tl-today-pill">{{ item.label }}</span></li>
+      {% else %}
+      <li class="tl-item is-{{ item.state }}">
+        <div class="tl-date"><span class="tl-mon">{{ item.month }}</span><span class="tl-day">{{ item.day }}</span><span class="tl-dow">{{ item.weekday }}</span></div>
+        <span class="tl-node" aria-hidden="true"></span>
+        <div class="tl-card">
+          <p class="tl-title">{{ item.title }}{% if item.state == "overdue" %} <span class="tag warn">Overdue</span>{% endif %}</p>
+          {% if item.when %}<p class="tl-when">{{ item.when }}</p>{% endif %}
+          {% if item.detail or item.source %}<p class="muted tl-detail">{{ item.detail }}{% if item.source %} <a href="{{ item.source }}" target="_blank" rel="noopener">Official page</a>{% endif %}</p>{% endif %}
+        </div>
+      </li>
+      {% endif %}
+    {% endfor %}
+    {% endfor %}
+  </ol>
 </section>
 {% endif %}
 
