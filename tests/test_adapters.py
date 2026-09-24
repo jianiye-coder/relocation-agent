@@ -260,3 +260,31 @@ def test_request_from_intake(intake):
     req = request_from_intake(intake.model_copy(update={"vehicles": ["suv"], "pets": ["cat"]}), "IL", "IL")
     assert req.volume_cuft == intake.volume and req.weight_lbs == intake.volume * 7
     assert req.vehicles[0].kind == "suv" and req.pets == ["cat"] and req.origin_access.floor == 3
+
+
+def test_quote_cache_is_safe_under_concurrent_threads(tmp_path):
+    """The agent runs tools in parallel threads; they share one cache. It must not corrupt or crash."""
+    import concurrent.futures as cf
+
+    cache = QuoteCache(tmp_path / "cache.db")
+    registry = Registry([SampleCatalogAdapter()], cache=cache)
+
+    def one(i):
+        return asyncio.run(registry.quotes(la_to_sf(distance_miles=300 + i % 5)))[0]
+
+    with cf.ThreadPoolExecutor(8) as pool:
+        results = list(pool.map(one, range(60)))
+    assert all(r.error is None and r.quotes for r in results)
+
+
+def test_cache_failure_degrades_to_a_live_fetch():
+    """A broken cache must not fail the request; the registry fetches without it."""
+    class BrokenCache(QuoteCache):
+        def get(self, key):
+            raise RuntimeError("disk gone")
+
+        def put(self, key, quotes):
+            raise RuntimeError("disk gone")
+
+    result = asyncio.run(Registry([SampleCatalogAdapter()], cache=BrokenCache(":memory:")).quotes(la_to_sf()))[0]
+    assert result.error is None and result.quotes and not result.from_cache
