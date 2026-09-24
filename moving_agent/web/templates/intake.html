@@ -4,6 +4,14 @@
 <h1>Plan your move</h1>
 <p class="lead">Tell us about your move. We'll compare truck, movers and storage options that fit your dates and budget.</p>
 
+<section class="voice-intake" aria-labelledby="voice-intake-title">
+  <h2 id="voice-intake-title">Tell us about your move</h2>
+  <p class="muted">Speak naturally, then review the transcript and the fields we fill. Nothing is submitted until you choose Find my options.</p>
+  <div class="voice-actions"><button id="start_voice" class="btn btn-secondary" type="button">Start voice input</button><button id="fill_from_voice" class="btn btn-primary" type="button" disabled>Fill my details</button></div>
+  <div class="voice-transcript"><label for="voice_transcript">Voice transcript <span class="hint">· edit before filling</span></label><textarea id="voice_transcript" rows="4" placeholder="For example: I’m moving from Chicago to San Francisco on October 15 with a one-bedroom apartment, a cat, and a $5,000 budget."></textarea></div>
+  <p id="voice_status" class="muted voice-status" role="status" aria-live="polite"></p>
+</section>
+
 {% if errors %}
 <div class="errors" role="alert"><strong>Please fix:</strong><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>
 {% endif %}
@@ -138,6 +146,79 @@
   <div class="actions"><button class="btn btn-primary" type="submit">Find my options</button></div>
 </form>
 
+<script>
+// Browser speech recognition creates a reviewable local transcript. Only when
+// the user explicitly chooses Fill my details is that transcript sent for field extraction.
+(() => {
+  const start = document.getElementById("start_voice");
+  const fill = document.getElementById("fill_from_voice");
+  const transcript = document.getElementById("voice_transcript");
+  const status = document.getElementById("voice_status");
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recognition, finalText = "", listening = false;
+
+  const setStatus = (text) => { status.textContent = text; };
+  const checkTranscript = () => { fill.disabled = !transcript.value.trim(); };
+  transcript.addEventListener("input", checkTranscript);
+
+  if (!Recognition) {
+    start.disabled = true;
+    setStatus("Voice input is not available in this browser. You can paste a transcript here instead.");
+  } else {
+    recognition = new Recognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = navigator.language || "en-US";
+    recognition.onstart = () => { listening = true; start.textContent = "Stop voice input"; setStatus("Listening… speak naturally."); };
+    recognition.onresult = (event) => {
+      let interim = "";
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const text = event.results[i][0].transcript;
+        if (event.results[i].isFinal) finalText += text + " "; else interim += text;
+      }
+      transcript.value = (finalText + interim).trim();
+      checkTranscript();
+    };
+    recognition.onerror = (event) => { setStatus(event.error === "not-allowed" ? "Microphone permission was not granted. Paste a transcript instead." : "Voice input stopped: " + event.error + ". You can paste a transcript instead."); };
+    recognition.onend = () => { listening = false; start.textContent = "Start voice input"; if (transcript.value.trim()) setStatus("Review the transcript, then choose Fill my details."); };
+    start.addEventListener("click", () => { if (listening) recognition.stop(); else { finalText = transcript.value.trim() ? transcript.value.trim() + " " : ""; recognition.start(); } });
+  }
+
+  const setValue = (name, value) => {
+    const field = document.querySelector("[name='" + name + "']");
+    if (!field || value === null || value === undefined) return false;
+    field.value = value;
+    if (name === "from_address" || name === "to_address") field.dispatchEvent(new Event("change", {bubbles: true}));
+    return true;
+  };
+  const setChecks = (name, values) => {
+    if (!Array.isArray(values)) return 0;
+    const selected = new Set(values); let count = 0;
+    document.querySelectorAll("input[name='" + name + "']").forEach((field) => { field.checked = selected.has(field.value); count += 1; });
+    return count ? 1 : 0;
+  };
+  fill.addEventListener("click", async () => {
+    const text = transcript.value.trim();
+    if (!text) return;
+    fill.disabled = true; setStatus("Finding the details you stated…");
+    try {
+      const response = await fetch("/api/intake/voice-autofill", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({transcript: text})});
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.detail || "Voice autofill is unavailable.");
+      const fields = result.fields || {}; let filled = 0;
+      Object.entries(fields).forEach(([name, value]) => {
+        if (name === "pets") filled += setValue(name, value.join(", ")) ? 1 : 0;
+        else if (name === "items_to_sell") filled += setValue(name, value.join("\n")) ? 1 : 0;
+        else if (name === "vehicles" || name === "needs") filled += setChecks(name, value);
+        else if (name === "from_elevator" || name === "to_elevator") { const field = document.querySelector("[name='" + name + "']"); if (field) { field.checked = value; filled += 1; } }
+        else filled += setValue(name, value) ? 1 : 0;
+      });
+      setStatus(filled ? "Filled " + filled + " field" + (filled === 1 ? "" : "s") + ". Please review every value before continuing." : "No form details were clear enough to fill. Edit the transcript or complete the form manually.");
+    } catch (error) { setStatus(error.message); }
+    finally { checkTranscript(); }
+  });
+})();
+</script>
 <script>
 // Look up each address when the user leaves the field, fill in its ZIP,
 // then calculate the driving distance once both are known.
