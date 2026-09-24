@@ -84,7 +84,7 @@ def _display_value(value: Any) -> str | None:
     return str(value).replace("_", " ").title()
 
 
-def rental_listings(zip_code: str, min_rent: int | None = None, max_rent: int | None = None,
+def rental_listings(location: str, min_rent: int | None = None, max_rent: int | None = None,
                     bedrooms: int | None = None, limit: int = 12,
                     scraper: Callable[..., list[Any]] | None = None) -> dict:
     """Return current Realtor.com rentals through HomeHarvest.
@@ -93,8 +93,9 @@ def rental_listings(zip_code: str, min_rent: int | None = None, max_rent: int | 
     change or become unavailable without notice, so callers must show its
     source and never substitute sample homes.
     """
-    if not (zip_code.isdigit() and len(zip_code) == 5):
-        return _unavailable(HOMEHARVEST_SOURCE, "Enter a 5-digit destination ZIP code.") | {"listings": []}
+    location = location.strip()
+    if not location:
+        return _unavailable(HOMEHARVEST_SOURCE, "Enter a city, neighborhood, area, or ZIP code.") | {"listings": []}
 
     if scraper is None:
         try:
@@ -103,7 +104,7 @@ def rental_listings(zip_code: str, min_rent: int | None = None, max_rent: int | 
             return _unavailable(HOMEHARVEST_SOURCE, "HomeHarvest is not installed. Install the project dependencies and try again.") | {"listings": []}
         scraper = scrape_property
     options: dict[str, Any] = {
-        "location": zip_code, "listing_type": "for_rent", "return_type": "pydantic",
+        "location": location, "listing_type": "for_rent", "return_type": "pydantic",
         "price_min": min_rent, "price_max": max_rent,
         "beds_min": bedrooms, "beds_max": bedrooms,
         "sort_by": "list_date", "sort_direction": "desc", "limit": min(max(limit, 1), 50),

@@ -108,6 +108,16 @@ def test_housing_results_offer_sorting_filter_chips_and_map_view(monkeypatch):
     assert 'class="clear-filters" href="/housing"' in response.text
 
 
+def test_housing_accepts_a_city_or_neighborhood_location(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(web.home, "rental_listings", lambda **filters: captured.update(filters) or {
+        "available": True, "source": "HomeHarvest", "fetched_at": "2026-09-23T20:00:00+00:00", "listings": []})
+    response = TestClient(web.app).get("/housing?location=Lakeview%2C+Chicago")
+    assert response.status_code == 200 and captured["location"] == "Lakeview, Chicago"
+    for text in ["Destination area", "Lakeview, Chicago", "city, neighborhood, larger area, or ZIP code"]:
+        assert text in response.text
+
+
 def test_housing_page_has_specific_filter_errors():
     response = TestClient(web.app).get("/housing?zip_code=94110&min_rent=3000&max_rent=2000&bedrooms=one")
     assert response.status_code == 200

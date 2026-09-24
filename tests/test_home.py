@@ -125,3 +125,14 @@ def test_rental_listings_normalize_homeharvest_response():
 def test_rental_listings_reports_scraper_errors_without_a_fallback():
     result = rental_listings("94110", scraper=lambda **_: (_ for _ in ()).throw(RuntimeError("blocked")))
     assert result["available"] is False and result["listings"] == [] and "unavailable" in result["message"]
+
+
+def test_rental_listings_accepts_a_city_or_neighborhood():
+    captured = {}
+    result = rental_listings("Lakeview, Chicago", scraper=lambda **options: captured.update(options) or [])
+    assert result["available"] is True and captured["location"] == "Lakeview, Chicago"
+
+
+def test_rental_listings_requires_a_destination_area():
+    result = rental_listings("", scraper=lambda **_: [])
+    assert result["available"] is False and "city, neighborhood, area, or ZIP" in result["message"]

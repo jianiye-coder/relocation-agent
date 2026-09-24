@@ -327,10 +327,10 @@ def listing_check_form(request: Request):
 
 # ---- housing search ----
 
-def _housing_filters(zip_code: str, min_rent: str, max_rent: str, bedrooms: str) -> tuple[dict, list[str]]:
+def _housing_filters(location: str, min_rent: str, max_rent: str, bedrooms: str) -> tuple[dict, list[str]]:
     """Validate browser query strings before sending only requested HomeHarvest filters."""
     errors: list[str] = []
-    values: dict[str, int | str | None] = {"zip_code": zip_code.strip(), "min_rent": None, "max_rent": None, "bedrooms": None}
+    values: dict[str, int | str | None] = {"location": location.strip(), "min_rent": None, "max_rent": None, "bedrooms": None}
     for key, raw, label in (("min_rent", min_rent, "minimum rent"), ("max_rent", max_rent, "maximum rent"), ("bedrooms", bedrooms, "bedrooms")):
         if not raw.strip():
             continue
@@ -392,14 +392,16 @@ def _map_points(listings: list[dict]) -> list[dict]:
 
 
 @app.get("/housing", response_class=HTMLResponse)
-def housing(request: Request, zip_code: str = "", min_rent: str = "", max_rent: str = "", bedrooms: str = "",
+def housing(request: Request, location: str = "", zip_code: str = "", min_rent: str = "", max_rent: str = "", bedrooms: str = "",
             rid: str = "", commute_destination: str = "", commute_mode: str = "drive", commute_departure_time: str = "",
             sort: str = "newest", view: str = "list"):
     plan_session = _session(rid, request) if rid else None
-    if plan_session and not zip_code:
-        zip_code = plan_session.intake.to_zip
-    filters, errors = _housing_filters(zip_code, min_rent, max_rent, bedrooms)
-    searched = bool(zip_code.strip())
+    # Keep old shared ZIP links working while making the user-facing input a flexible area search.
+    location = location.strip() or zip_code.strip()
+    if plan_session and not location:
+        location = plan_session.intake.to_zip
+    filters, errors = _housing_filters(location, min_rent, max_rent, bedrooms)
+    searched = bool(location)
     results = None
     commute = {"destination": commute_destination, "mode": commute_mode, "departure_time": commute_departure_time}
     if sort not in {"newest", "rent_low", "commute"}:
@@ -413,7 +415,7 @@ def housing(request: Request, zip_code: str = "", min_rent: str = "", max_rent: 
             if sort_error:
                 errors.append(sort_error)
     return templates.TemplateResponse(request, "housing.html", {
-        "filters": {"zip_code": zip_code, "min_rent": min_rent, "max_rent": max_rent, "bedrooms": bedrooms},
+        "filters": {"location": location, "min_rent": min_rent, "max_rent": max_rent, "bedrooms": bedrooms},
         "errors": errors, "searched": searched, "results": results, "rid": rid,
         "commute": commute, "sort": sort, "view": view,
         "links": _housing_links(filters, rid, commute, sort),

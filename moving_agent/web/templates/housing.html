@@ -24,7 +24,7 @@
 
 <form class="housing-search" method="get" action="/housing" role="search" aria-label="Search rental listings">
   {% if rid %}<input type="hidden" name="rid" value="{{ rid }}">{% endif %}
-  <div class="field"><label for="zip_code">Destination ZIP code</label><input id="zip_code" name="zip_code" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" autocomplete="postal-code" required value="{{ filters.zip_code }}" placeholder="e.g. 94110"></div>
+  <div class="field"><label for="location">Destination area</label><input id="location" name="location" autocomplete="address-level2" required value="{{ filters.location }}" placeholder="e.g. Lakeview, Chicago or South Bay, CA"><p class="field-help">Search a city, neighborhood, larger area, or ZIP code.</p></div>
   <div class="row">
     <div class="field"><label for="min_rent">Minimum monthly rent <span class="hint">· optional</span></label><input id="min_rent" name="min_rent" inputmode="numeric" min="0" value="{{ filters.min_rent }}" placeholder="e.g. 2200"></div>
     <div class="field"><label for="max_rent">Maximum monthly rent <span class="hint">· optional</span></label><input id="max_rent" name="max_rent" inputmode="numeric" min="0" value="{{ filters.max_rent }}" placeholder="e.g. 3200"></div>
@@ -43,13 +43,13 @@
 {% if results %}
   {% if results.available %}
     <section class="block housing-results" aria-live="polite">
-      <h2>{{ results.listings|length }} active listing{{ "s" if results.listings|length != 1 }} near {{ filters.zip_code }}</h2>
+      <h2>{{ results.listings|length }} active listing{{ "s" if results.listings|length != 1 }} near {{ filters.location }}</h2>
       <p class="muted section-lead">Source: {{ results.source }} · checked {{ results.fetched_at|checked }}. Listing availability can change; confirm with the property before applying or paying.</p>
       {% if results.listings %}
         <div class="housing-toolbar">
-          <div class="filter-chips" aria-label="Active filters"><span class="filter-label">Filters</span><span class="filter-chip">{{ filters.zip_code }}</span>{% if filters.min_rent %}<span class="filter-chip">Min ${{ "{:,}".format(filters.min_rent|int) }}</span>{% endif %}{% if filters.max_rent %}<span class="filter-chip">Max ${{ "{:,}".format(filters.max_rent|int) }}</span>{% endif %}{% if filters.bedrooms != "" %}<span class="filter-chip">{{ "Studio" if filters.bedrooms == "0" else filters.bedrooms ~ " bed" }}</span>{% endif %}<a class="clear-filters" href="{{ links["clear"] }}">Clear</a></div>
+          <div class="filter-chips" aria-label="Active filters"><span class="filter-label">Filters</span><span class="filter-chip">{{ filters.location }}</span>{% if filters.min_rent %}<span class="filter-chip">Min ${{ "{:,}".format(filters.min_rent|int) }}</span>{% endif %}{% if filters.max_rent %}<span class="filter-chip">Max ${{ "{:,}".format(filters.max_rent|int) }}</span>{% endif %}{% if filters.bedrooms != "" %}<span class="filter-chip">{{ "Studio" if filters.bedrooms == "0" else filters.bedrooms ~ " bed" }}</span>{% endif %}<a class="clear-filters" href="{{ links["clear"] }}">Clear</a></div>
           <div class="housing-controls">
-            <form method="get" action="/housing" class="sort-control"><input type="hidden" name="zip_code" value="{{ filters.zip_code }}"><input type="hidden" name="min_rent" value="{{ filters.min_rent }}"><input type="hidden" name="max_rent" value="{{ filters.max_rent }}"><input type="hidden" name="bedrooms" value="{{ filters.bedrooms }}"><input type="hidden" name="rid" value="{{ rid }}"><input type="hidden" name="commute_destination" value="{{ commute.destination }}"><input type="hidden" name="commute_mode" value="{{ commute.mode }}"><input type="hidden" name="commute_departure_time" value="{{ commute.departure_time }}"><input type="hidden" name="view" value="{{ view }}"><label class="sr-only" for="sort">Sort listings</label><select id="sort" name="sort" onchange="this.form.submit()"><option value="newest"{% if sort == "newest" %} selected{% endif %}>Newest</option><option value="rent_low"{% if sort == "rent_low" %} selected{% endif %}>Rent: low to high</option><option value="commute"{% if sort == "commute" %} selected{% endif %}>Shortest commute</option></select><noscript><button class="btn btn-secondary btn-sm" type="submit">Sort</button></noscript></form>
+            <form method="get" action="/housing" class="sort-control"><input type="hidden" name="location" value="{{ filters.location }}"><input type="hidden" name="min_rent" value="{{ filters.min_rent }}"><input type="hidden" name="max_rent" value="{{ filters.max_rent }}"><input type="hidden" name="bedrooms" value="{{ filters.bedrooms }}"><input type="hidden" name="rid" value="{{ rid }}"><input type="hidden" name="commute_destination" value="{{ commute.destination }}"><input type="hidden" name="commute_mode" value="{{ commute.mode }}"><input type="hidden" name="commute_departure_time" value="{{ commute.departure_time }}"><input type="hidden" name="view" value="{{ view }}"><label class="sr-only" for="sort">Sort listings</label><select id="sort" name="sort" onchange="this.form.submit()"><option value="newest"{% if sort == "newest" %} selected{% endif %}>Newest</option><option value="rent_low"{% if sort == "rent_low" %} selected{% endif %}>Rent: low to high</option><option value="commute"{% if sort == "commute" %} selected{% endif %}>Shortest commute</option></select><noscript><button class="btn btn-secondary btn-sm" type="submit">Sort</button></noscript></form>
             <nav class="view-toggle" aria-label="Results view"><a href="{{ links.list }}"{% if view == "list" %} class="is-active" aria-current="page"{% endif %}>List</a><a href="{{ links.map }}"{% if view == "map" %} class="is-active" aria-current="page"{% endif %}>Map</a></nav>
           </div>
         </div>
@@ -65,6 +65,6 @@
     <div class="errors" role="alert">{{ results.message }} · {{ results.source }}</div>
   {% endif %}
 {% elif not searched %}
-  <div class="card"><h2>Start with a destination</h2><p class="muted" style="margin:8px 0 0">Enter a five-digit ZIP code to search currently active rentals.</p></div>
+  <div class="card"><h2>Start with a destination</h2><p class="muted" style="margin:8px 0 0">Enter a city, neighborhood, larger area, or ZIP code to search currently active rentals.</p></div>
 {% endif %}
 {% endblock %}

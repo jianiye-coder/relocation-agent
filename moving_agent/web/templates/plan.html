@@ -217,5 +217,5 @@
 <p class="muted">Schools: {{ home.schools.message }} · {{ home.schools.source }}</p>
 <p class="muted">Internet: {{ home.utilities.broadband.message }} · {{ home.utilities.broadband.source }}</p>
 <p class="muted">Electricity: {{ home.utilities.electricity.message }} · {{ home.utilities.electricity.source }}</p></div>{% endfor %}</section>{% endif %}
-<div class="actions"><a class="btn btn-secondary" href="/housing?zip_code={{ intake.to_zip }}&rid={{ rid }}">Find a home in {{ intake.to_zip }}</a><a class="btn btn-secondary" href="/">Start over</a></div>
+<div class="actions"><a class="btn btn-secondary" href="/housing?location={{ intake.to_zip }}&rid={{ rid }}">Find a home in {{ intake.to_zip }}</a><a class="btn btn-secondary" href="/">Start over</a></div>
 {% endblock %}
