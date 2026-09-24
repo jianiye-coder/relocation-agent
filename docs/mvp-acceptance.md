@@ -31,6 +31,6 @@ This document distinguishes implemented behavior from remaining review gaps. Fea
 2. Merge intake (#8).
 3. Retarget photo (#10) and homes (#9) to master. #9 already includes #8's latest commit; bring #10 up to date with master before merging. Both touch `intake.html`, `app.py` and `tests/test_web.py`, so merge one, then update the other.
 4. Merge Warp (#7), which targets master independently.
-5. On master, run `python -m pytest evals/test_feature_integration.py`, then close #5.
+5. On master, run `python -m pytest evals/test_feature_integration.py`, then close #5. (Done: all feature PRs are merged, and CI now runs the integration tests on every PR.)
 
 Never auto-merge. Run pytest and scripted evals on each branch. No credentials are required. Local `.env` files are not publishing sources.

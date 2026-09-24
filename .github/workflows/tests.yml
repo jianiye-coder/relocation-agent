@@ -15,4 +15,5 @@ jobs:
           python-version: "3.13"
       - run: python -m pip install -e ".[dev]"
       - run: python -m pytest -q
+      - run: python -m pytest -q evals/test_feature_integration.py
       - run: python -m evals.run --model scripted
