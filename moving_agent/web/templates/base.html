@@ -168,7 +168,7 @@
   .home-list { display: grid; gap: 12px; }
   .home-card { display: grid; grid-template-columns: 1fr auto; gap: 8px 16px; padding: 16px; border: 1px solid var(--hairline); border-radius: var(--r-md); background: var(--canvas); }
   .home-card.has-photo { grid-template-columns: 152px minmax(0, 1fr) auto; }
-  .home-media { position: relative; grid-row: span 3; min-height: 152px; overflow: hidden; border-radius: var(--r-sm); background: var(--surface-strong); }
+  .home-media { position: relative; grid-row: span 4; min-height: 152px; overflow: hidden; border-radius: var(--r-sm); background: var(--surface-strong); }
   .home-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .photo-count { position: absolute; right: 8px; bottom: 8px; border-radius: var(--r-full); padding: 3px 8px; color: #fff; background: rgba(34,34,34,.82); font-size: 11px; font-weight: 600; }
   .home-main { min-width: 0; }
@@ -176,9 +176,11 @@
   .home-card p { margin: 4px 0 0; }
   .home-rent { align-self: start; margin: 0 !important; font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .home-rent span { font-size: 13px; font-weight: 400; color: var(--muted); }
-  .home-fresh { grid-column: 1 / -1; }
+  .home-fresh, .home-contact { grid-column: 1 / -1; }
+  .home-contact { font-size: 14px; overflow-wrap: anywhere; }
+  .home-contact a { font-weight: 500; }
   .home-select { grid-column: 1 / -1; margin: 0; }
-  .home-card.has-photo .home-fresh { grid-column: 2 / -1; }
+  .home-card.has-photo .home-fresh, .home-card.has-photo .home-contact { grid-column: 2 / -1; }
   .home-card.has-photo .home-select { grid-column: 2 / -1; }
   .home-gallery, .home-no-photo, .home-disclaimer { grid-column: 1 / -1; margin: 0; }
   .home-gallery summary { cursor: pointer; font-size: 14px; font-weight: 500; }
@@ -317,7 +319,7 @@
     .home-card.has-photo { grid-template-columns: 112px minmax(0, 1fr); }
     .home-media { grid-row: span 2; min-height: 112px; }
     .home-card.has-photo .home-rent { grid-column: 2; }
-    .home-card.has-photo .home-fresh { grid-column: 1 / -1; }
+    .home-card.has-photo .home-fresh, .home-card.has-photo .home-contact { grid-column: 1 / -1; }
     .home-gallery > div { grid-template-columns: repeat(2, 1fr); }
     .housing-toolbar { align-items: flex-start; }
     .housing-controls { width: 100%; justify-content: space-between; }

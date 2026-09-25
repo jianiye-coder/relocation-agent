@@ -77,6 +77,35 @@ def _as_iso(value: Any) -> str | None:
     return value.isoformat() if isinstance(value, (date, datetime)) else value
 
 
+LISTING_HOST = "https://www.realtor.com/"
+
+
+def listing_url(value: Any) -> str:
+    """The listing's own Realtor.com page, where the landlord or agent is contacted. Anything else is dropped."""
+    url = str(value or "")
+    return url if url.startswith(LISTING_HOST) else ""
+
+
+def _phone(phones: Any) -> str:
+    phones = phones if isinstance(phones, list) else [phones] if phones else []
+    ordered = sorted(phones, key=lambda p: not _field(p, "primary"))
+    digits = next(("".join(ch for ch in str(_field(p, "number") or "") if ch.isdigit()) for p in ordered if _field(p, "number")), "")
+    digits = digits[1:] if len(digits) == 11 and digits.startswith("1") else digits
+    return f"({digits[:3]}) {digits[3:6]}-{digits[6:]}" if len(digits) == 10 else ""
+
+
+def listing_contact(property_data: Any) -> dict | None:
+    """Who advertises the listing, when the source says: agent or leasing office name and a phone."""
+    advertisers = _field(property_data, "advertisers")
+    agent, office = _field(advertisers, "agent"), _field(advertisers, "office")
+    name = _field(agent, "name") or _field(office, "name") or _field(_field(advertisers, "broker"), "name")
+    phone = _phone(_field(agent, "phones")) or _phone(_field(office, "phones"))
+    if not (name or phone):
+        return None
+    office_name = _field(office, "name")
+    return {"name": name or "", "office": office_name if office_name and office_name != name else "", "phone": phone}
+
+
 def _display_value(value: Any) -> str | None:
     if value is None:
         return None
@@ -131,7 +160,9 @@ def rental_listings(location: str, min_rent: int | None = None, max_rent: int | 
                 "listed_date": _as_iso(_field(item, "list_date")), "last_seen_date": _as_iso(_field(item, "last_update_date")),
                 "days_on_market": _field(item, "days_on_mls"), "status": _field(item, "status"),
                 "latitude": _field(item, "latitude"), "longitude": _field(item, "longitude"),
-                "photos": _listing_photos(item), "disclaimer": "Data supplied by Realtor.com via HomeHarvest; availability and details can change.",
+                "photos": _listing_photos(item),
+                "listing_url": listing_url(_field(item, "property_url")), "contact": listing_contact(item),
+                "disclaimer": "Data supplied by Realtor.com via HomeHarvest; availability and details can change.",
             })
         return {"available": True, "source": HOMEHARVEST_SOURCE, "fetched_at": _now(), "listings": listings}
     except Exception:

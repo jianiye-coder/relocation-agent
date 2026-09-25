@@ -9,9 +9,13 @@
     <div class="home-main"><h3>{{ home.address }}</h3><p class="muted">{{ home.property_type or "Rental home" }}{% if home.bedrooms is not none %} · {{ "Studio" if home.bedrooms == 0 else home.bedrooms ~ " bed" }}{% endif %}{% if home.bathrooms is not none %} · {{ home.bathrooms }} bath{% endif %}{% if home.square_feet %} · {{ "{:,}".format(home.square_feet) }} sq ft{% endif %}</p></div>
     <p class="home-rent">{% if home.rent is not none %}${{ "{:,}".format(home.rent) }}<span>/mo</span>{% else %}Rent unavailable{% endif %}</p>
     <p class="muted home-fresh">{% if home.listed_date %}Listed {{ home.listed_date[:10] }}{% endif %}{% if home.days_on_market is not none %} · {{ home.days_on_market }} day{{ "s" if home.days_on_market != 1 }} on market{% endif %}{% if home.commute_minutes is defined and home.commute_minutes is not none %} · {{ home.commute_minutes }} min {{ commute.mode }} commute{% endif %}</p>
+    {% if home.listing_url or home.contact %}
+    <p class="home-contact">{% if home.listing_url %}<a href="{{ home.listing_url }}" target="_blank" rel="noopener noreferrer">Contact the landlord on Realtor.com ↗</a>{% endif %}{% if home.contact %}<span class="muted">{% if home.listing_url %} · {% endif %}Listed by {{ home.contact.name or home.contact.office }}{% if home.contact.office and home.contact.name %} ({{ home.contact.office }}){% endif %}{% if home.contact.phone %} · <a href="tel:+1{{ home.contact.phone|replace("(", "")|replace(") ", "")|replace("-", "") }}">{{ home.contact.phone }}</a>{% endif %}</span>{% endif %}</p>
+    {% endif %}
     {% if rid %}
       <form class="home-select" method="post" action="/housing/{{ rid }}/select" data-busy="Adding this home to your plan…">
         <input type="hidden" name="address" value="{{ home.address }}"><input type="hidden" name="commute_destination" value="{{ commute.destination }}"><input type="hidden" name="commute_mode" value="{{ commute.mode }}">
+        <input type="hidden" name="listing_url" value="{{ home.listing_url or "" }}"><input type="hidden" name="contact_name" value="{{ (home.contact.name or home.contact.office) if home.contact else "" }}"><input type="hidden" name="contact_phone" value="{{ home.contact.phone if home.contact else "" }}">
         {% if home.address in saved_addresses %}<button class="btn btn-secondary btn-sm" type="button" disabled>Added to your plan</button>{% elif saved_addresses|length >= 2 %}<button class="btn btn-secondary btn-sm" type="button" disabled>Your plan has 2 homes</button>{% else %}<button class="btn btn-secondary btn-sm" type="submit">Add to my move plan</button>{% endif %}
       </form>
     {% endif %}

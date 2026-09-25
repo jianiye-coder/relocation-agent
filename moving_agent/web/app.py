@@ -70,6 +70,7 @@ class Session:
     history: list = field(default_factory=list)
     chat: list[dict] = field(default_factory=list)
     error: str = ""
+    listings: dict[str, dict] = field(default_factory=dict)  # candidate address -> where to contact the landlord
 
 
 # In-memory store is enough for a demo; swap for Postgres later.
@@ -236,12 +237,13 @@ async def run_turn(s: Session, prompt: str) -> None:
     s.chat.append({"role": "agent", "text": run.output.summary})
 
 
-def _candidate_home_results(intake: Intake) -> list[dict]:
+def _candidate_home_results(intake: Intake, listings: dict[str, dict] | None = None) -> list[dict]:
     """Populate decision data only for homes the user chose from Find a home."""
     leave = home.departure_time(intake.move_date, intake.commute_departure_time)
     return [{"address": address,
              "commute": home.commute(address, intake.commute_destination, intake.commute_mode, departure=leave),
-             "schools": home.schools(address), "utilities": home.utilities(address)}
+             "schools": home.schools(address), "utilities": home.utilities(address),
+             "listing": (listings or {}).get(address)}
             for address in intake.candidate_addresses]
 
 
@@ -477,7 +479,8 @@ def housing(request: Request, location: str = "", zip_code: str = "", min_rent: 
 
 @app.post("/housing/{rid}/select")
 def select_candidate_home(request: Request, rid: str, address: str = Form(...), commute_destination: str = Form(""),
-                          commute_mode: str = Form("drive")):
+                          commute_mode: str = Form("drive"), listing_url: str = Form(""), contact_name: str = Form(""),
+                          contact_phone: str = Form("")):
     """Attach one Find-a-home result to the current move plan (at most two)."""
     s = _session(rid, request)
     address = address.strip()
@@ -493,9 +496,12 @@ def select_candidate_home(request: Request, rid: str, address: str = Form(...), 
         "commute_destination": commute_destination.strip(), "commute_mode": commute_mode,
         "commute_departure_time": "",
     })
+    link = home.listing_url(listing_url.strip())
+    if link or contact_name.strip() or contact_phone.strip():
+        s.listings[address] = {"url": link, "name": contact_name.strip()[:120], "phone": contact_phone.strip()[:20]}
     s.intake = updated
     s.deps.intake = updated
-    s.deps.home_results = _candidate_home_results(updated)
+    s.deps.home_results = _candidate_home_results(updated, s.listings)
     return RedirectResponse(f"/plan/{rid}/home?home_selected=1", status_code=303)
 
 

@@ -242,6 +242,7 @@
 {% if view == "home" %}
 {% if home_selected %}<p class="success" role="status">Home added to your plan. We updated its decision data below.</p>{% endif %}
 {% if home_results %}<section class="block"><h2>Homes you’re comparing</h2>{% for home in home_results %}<div class="card"><h3>{{ home.address }}</h3>
+{% if home.listing %}<p class="home-contact">{% if home.listing.url %}<a href="{{ home.listing.url }}" target="_blank" rel="noopener noreferrer">Contact the landlord on Realtor.com ↗</a>{% endif %}{% if home.listing.name or home.listing.phone %}<span class="muted">{% if home.listing.url %} · {% endif %}{% if home.listing.name %}Listed by {{ home.listing.name }}{% endif %}{% if home.listing.phone %}{% if home.listing.name %} · {% endif %}<a href="tel:+1{{ home.listing.phone|replace("(", "")|replace(") ", "")|replace("-", "") }}">{{ home.listing.phone }}</a>{% endif %}</span>{% endif %}</p>{% endif %}
 <p class="muted">Commute: {% if home.commute.available %}{{ home.commute.minutes }} min · {{ home.commute.miles }} mi{% if home.commute.departure %} · leaving {{ home.commute.departure|clock }}{% endif %}{% else %}{{ home.commute.message }}{% endif %} · {{ home.commute.source }}{% if home.commute.fetched_at %} · checked {{ home.commute.fetched_at|checked }}{% endif %}</p>
 <p class="muted">Schools: {{ home.schools.message }} · {{ home.schools.source }}</p>
 <p class="muted">Internet: {{ home.utilities.broadband.message }} · {{ home.utilities.broadband.source }}</p>

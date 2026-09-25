@@ -126,8 +126,10 @@ def test_selecting_housing_result_adds_candidate_and_commute_data(intake, monkey
     response = client.post("/plan", data=form(intake))
     import re
     rid = re.search(r"/plan/(\w+)", str(response.url)).group(1)
-    response = client.post(f"/housing/{rid}/select", data={"address": "1 Main St, San Francisco, CA", "commute_destination": "1 Market St, San Francisco, CA", "commute_mode": "transit"})
+    response = client.post(f"/housing/{rid}/select", data={"address": "1 Main St, San Francisco, CA", "commute_destination": "1 Market St, San Francisco, CA", "commute_mode": "transit",
+                                                          "listing_url": "https://www.realtor.com/rentals/details/1-Main-St", "contact_name": "Pat Lee", "contact_phone": "(415) 555-0100"})
     assert response.status_code == 200
+    assert 'href="https://www.realtor.com/rentals/details/1-Main-St"' in response.text and "Listed by Pat Lee" in response.text
     saved = web.SESSIONS[rid].intake
     assert saved.candidate_addresses == ["1 Main St, San Francisco, CA"]
     assert saved.commute_destination == "1 Market St, San Francisco, CA" and saved.commute_mode == "transit"
@@ -162,9 +164,12 @@ def test_housing_page_renders_real_listing_fields(monkeypatch):
         "listings": [{"id": "a", "address": "123 Valencia St, San Francisco, CA 94110", "rent": 2895,
                       "bedrooms": 1, "bathrooms": 1, "square_feet": 610, "property_type": "Condo",
                       "listed_date": "2026-09-20T00:00:00.000Z", "last_seen_date": "", "days_on_market": 3, "status": "Active", "latitude": 37.76, "longitude": -122.42,
-                      "photos": ["https://images.example/home.jpg", "https://images.example/home-2.jpg"], "disclaimer": "Realtor.com data"}],
+                      "photos": ["https://images.example/home.jpg", "https://images.example/home-2.jpg"], "disclaimer": "Realtor.com data",
+                      "listing_url": "https://www.realtor.com/rentals/details/123-Valencia-St", "contact": {"name": "Pat Lee", "office": "", "phone": "(415) 555-0100"}}],
     })
     response = TestClient(web.app).get("/housing?zip_code=94110&min_rent=2500&max_rent=3000&bedrooms=1")
+    assert 'href="https://www.realtor.com/rentals/details/123-Valencia-St" target="_blank" rel="noopener noreferrer">Contact the landlord on Realtor.com' in response.text
+    assert "Listed by Pat Lee" in response.text and 'href="tel:+14155550100"' in response.text
     assert response.status_code == 200
     for text in ["123 Valencia St", "$2,895", "610 sq ft", "checked Sep 23", "3 days on market", "View all 2 photos", "Realtor.com data"]:
         assert text in response.text
@@ -236,3 +241,12 @@ def test_unfound_address_gets_a_plain_error(intake, monkeypatch):
     assert response.status_code == 422
     assert "Moving from: We couldn&#39;t find that address." in response.text
     assert "String should match pattern" not in response.text and "we can find" not in response.text
+
+
+def test_saved_home_never_links_outside_realtor(intake):
+    client = TestClient(web.app)
+    response = client.post("/plan", data=form(intake))
+    import re
+    rid = re.search(r"/plan/(\w+)", str(response.url)).group(1)
+    response = client.post(f"/housing/{rid}/select", data={"address": "1 Main St, San Francisco, CA", "listing_url": "https://evil.example/phish"})
+    assert "evil.example" not in response.text
