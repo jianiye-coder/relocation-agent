@@ -47,6 +47,21 @@ There is no implemented FCC or NREL/OpenEI address-level adapter. Do not add a `
 
 Delivery configuration and standalone scripts remain in the repository for future work, but the MVP web app and agent cannot draft, approve, or send quote-request emails. Do not run standalone delivery scripts during demo verification.
 
+## Deploy to Vercel
+
+The repo deploys as one Vercel Function (FastAPI preset). `pyproject.toml` points Vercel at the app (`[tool.vercel] entrypoint = "moving_agent.web.app:app"`), and `vercel.json` leaves tests, evals and docs out of the bundle.
+
+1. **Import** the GitHub repo in Vercel. Keep the FastAPI preset and root directory `./`.
+2. **Add Redis** before the first real use: Vercel → Storage (Marketplace) → **Upstash Redis** → connect it to this project. It adds `KV_REST_API_URL` / `KV_REST_API_TOKEN` (or `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`). Without it, plans live in one function instance's memory and users will see "That plan is no longer available" when a request lands on another instance. Plans expire after 7 days.
+3. **Environment variables** (Production):
+   - `FLATKEY_API_KEY` and `MOVING_AGENT_MODEL=flatkey:claude-sonnet-5`
+   - `ACCESS_CODE`: a shared code for testers. Every page asks for it first, so strangers can't spend your LLM credits.
+   - Optional: `GOOGLE_MAPS_API_KEY` (commute), `FMCSA_WEB_KEY` (mover check)
+   - Leave out email/SMTP/Gmail variables, `ENABLE_UNOFFICIAL_ADAPTERS` (terms not reviewed; datacenter IPs are more likely to be blocked) and the voice/photo flags.
+4. **Redeploy** after changing variables.
+
+On Vercel the quote cache lives in `/tmp` (the only writable path) and lasts as long as an instance does. Vercel's Hobby plan is for personal, non-commercial use.
+
 ## Modules
 
 | Module | Responsibility |

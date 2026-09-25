@@ -25,6 +25,10 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest", "aiosmtpd"]
 
+[tool.vercel]
+# Vercel looks for a FastAPI instance named `app`; ours lives in the web package.
+entrypoint = "moving_agent.web.app:app"
+
 [tool.setuptools.packages.find]
 include = ["moving_agent*", "evals*"]
 

@@ -1,0 +1,8 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "moving_agent/web/app.py": {
+      "excludeFiles": "{tests/**,evals/**,docs/**,scripts/**,outbox/**,**/__pycache__/**,*.egg-info/**}"
+    }
+  }
+}
