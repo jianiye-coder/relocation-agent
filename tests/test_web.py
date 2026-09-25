@@ -24,7 +24,7 @@ def test_intake_uses_a_destination_area_instead_of_asking_for_a_to_zip():
     page = TestClient(web.app).get("/").text
     assert '<label for="to_address">Moving to</label>' in page
     assert "City, neighborhood, or area" in page
-    assert "Lakeview, Chicago; Mountain View; South Bay; or East Bay." in page
+    assert "Start broad" not in page
     assert '<input id="to_zip" name="to_zip" type="hidden">' in page
     assert '<label for="to_zip">' not in page
 
@@ -250,3 +250,10 @@ def test_saved_home_never_links_outside_realtor(intake):
     rid = re.search(r"/plan/(\w+)", str(response.url)).group(1)
     response = client.post(f"/housing/{rid}/select", data={"address": "1 Main St, San Francisco, CA", "listing_url": "https://evil.example/phish"})
     assert "evil.example" not in response.text
+
+
+def test_missing_plan_shows_the_intake_form_with_an_explanation():
+    response = TestClient(web.app).get("/plan/doesnotexist")
+    assert response.status_code == 404
+    assert "That plan is no longer available" in response.text and "Find my options" in response.text
+    assert '"detail"' not in response.text

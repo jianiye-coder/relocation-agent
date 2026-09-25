@@ -91,35 +91,88 @@ def test_zip_only_destination(monkeypatch):
     assert place.zip == "94110" and "ZIP center" in place.matched_address
 
 
-def test_city_state_destination_uses_a_representative_zip_when_census_has_no_match(monkeypatch):
-    calls = []
+def photon_feature(name, lat, lon, state, kind="city", postcode=None):
+    return {"geometry": {"coordinates": [lon, lat]},
+            "properties": {"name": name, "type": kind, "osm_value": kind, "state": state, "postcode": postcode, "countrycode": "US"}}
 
+
+def census_zcta(zip_code):
+    return {"result": {"geographies": {geo.ZCTA_LAYER: [{"ZCTA5": zip_code}] if zip_code else []}}}
+
+
+def fake_area_services(calls, photon=None, zcta="60605", zippopotam=None):
     def fake_get(url, **kwargs):
         calls.append(url)
         if url == geo.CENSUS_URL:
             return FakeResponse({"result": {"addressMatches": []}})
-        return FakeResponse({"places": [{"place name": "Mountain View", "post code": "94040", "latitude": "37.3861", "longitude": "-122.0839"}]})
-
-    monkeypatch.delenv("GOOGLE_MAPS_API_KEY", raising=False)
-    monkeypatch.setattr(geo.httpx, "get", fake_get)
-    place = geo.geocode("Mountain View, CA")
-    assert place.zip == "94040" and "city center" in place.matched_address
-    assert any(url.startswith("https://api.zippopotam.us/us/CA/") for url in calls)
-
-
-def test_city_only_destination_uses_nominatim(monkeypatch):
-    def fake_get(url, **kwargs):
-        if url == geo.CENSUS_URL:
-            return FakeResponse({"result": {"addressMatches": []}})
-        if url == geo.NOMINATIM_URL:
-            return FakeResponse([{
-                "lat": "37.3229", "lon": "-122.0323",
-                "address": {"city": "Cupertino", "state": "California", "postcode": "95014"},
-            }])
+        if url == geo.PHOTON_URL:
+            if isinstance(photon, Exception):
+                raise photon
+            return FakeResponse({"features": photon or []})
+        if url == geo.CENSUS_COORDS_URL:
+            return FakeResponse(census_zcta(zcta))
+        if url.startswith("https://api.zippopotam.us/us/"):
+            return FakeResponse({"places": zippopotam or []}, 200 if zippopotam else 404)
         raise AssertionError(url)
+    return fake_get
 
+
+@pytest.fixture
+def area_lookup(monkeypatch):
+    geo._city_only.cache_clear()
     monkeypatch.delenv("GOOGLE_MAPS_API_KEY", raising=False)
-    monkeypatch.setattr(geo.httpx, "get", fake_get)
-    place = geo.geocode("Cupertino")
-    assert place.zip == "95014" and place.lat == pytest.approx(37.3229)
-    assert "Cupertino" in place.matched_address
+    yield
+    geo._city_only.cache_clear()
+
+
+def test_big_city_without_state_resolves_to_the_zip_at_its_center(monkeypatch, area_lookup):
+    # Photon returns big cities without a postcode; the Census names the ZIP area at the center.
+    calls = []
+    monkeypatch.setattr(geo.httpx, "get", fake_area_services(calls, [photon_feature("Chicago", 41.8756, -87.6244, "Illinois")], "60605"))
+    place = geo.geocode("chicago")
+    assert (place.zip, place.lat) == ("60605", pytest.approx(41.8756))
+    assert place.matched_address == "Chicago, IL 60605 (city center)"
+    assert geo.PHOTON_URL in calls and geo.CENSUS_COORDS_URL in calls
+
+
+def test_census_zip_beats_a_single_building_postcode(monkeypatch, area_lookup):
+    feature = photon_feature("Mission", 37.7599, -122.4148, "California", kind="suburb", postcode="94143")
+    monkeypatch.setattr(geo.httpx, "get", fake_area_services([], [feature], "94110"))
+    place = geo.geocode("Mission, San Francisco")
+    assert place.zip == "94110" and place.matched_address.endswith("(area center)")
+
+
+def test_neighborhood_postcode_is_used_when_census_has_no_zip_area(monkeypatch, area_lookup):
+    feature = photon_feature("Cupertino", 37.3229, -122.0323, "California", postcode="95014")
+    monkeypatch.setattr(geo.httpx, "get", fake_area_services([], [feature], zcta=None))
+    assert geo.geocode("Cupertino").zip == "95014"
+
+
+def test_city_and_state_fall_back_to_zippopotam_when_photon_is_down(monkeypatch, area_lookup):
+    # Zippopotam lists New York as "New York City"; a name that starts with what was typed counts.
+    zips = [{"place name": "New York City", "post code": z, "latitude": str(lat), "longitude": str(lon)}
+            for z, lat, lon in [("10007", 40.71, -74.00), ("10463", 40.88, -73.91), ("10306", 40.57, -74.12)]]
+    monkeypatch.setattr(geo.httpx, "get", fake_area_services([], httpx.ConnectError("down"), zippopotam=zips))
+    place = geo.geocode("New York, NY")
+    assert place.zip == "10007" and place.matched_address == "New York City, NY 10007 (city center)"
+
+
+def test_city_without_state_explains_when_lookup_is_down(monkeypatch, area_lookup):
+    monkeypatch.setattr(geo.httpx, "get", fake_area_services([], httpx.ConnectError("down")))
+    with pytest.raises(geo.GeoError, match="Add the state"):
+        geo.geocode("chicago")
+
+
+def test_unknown_area_is_a_clear_error(monkeypatch, area_lookup):
+    monkeypatch.setattr(geo.httpx, "get", fake_area_services([], []))
+    with pytest.raises(geo.GeoError, match="couldn't resolve"):
+        geo.geocode("qwxzv nowhere")
+
+
+def test_repeated_lookups_are_cached(monkeypatch, area_lookup):
+    calls = []
+    monkeypatch.setattr(geo.httpx, "get", fake_area_services(calls, [photon_feature("Chicago", 41.8756, -87.6244, "Illinois")]))
+    geo.geocode("chicago"); geo.geocode("chicago")
+    assert calls.count(geo.PHOTON_URL) == 1
+
+
