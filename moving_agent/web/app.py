@@ -321,10 +321,21 @@ async def plan(
     return RedirectResponse(f"/plan/{rid}", status_code=303)
 
 
+class PlanNotFound(Exception):
+    """Plans live in memory, so a server restart (or another browser) loses them."""
+
+
+@app.exception_handler(PlanNotFound)
+async def plan_not_found(request: Request, exc: PlanNotFound):
+    context = _form_context([]) | {"notice": "That plan is no longer available: plans are kept only while the app is running, "
+                                             "and it was restarted. Fill in the form again to make a new one."}
+    return templates.TemplateResponse(request, "intake.html", context, status_code=404)
+
+
 def _session(rid: str, request: Request) -> Session:
     s = SESSIONS.get(rid)
     if not s or s.sid != request.state.sid:
-        raise HTTPException(404, "Plan not found. Start again from the intake form.")
+        raise PlanNotFound(rid)
     return s
 
 

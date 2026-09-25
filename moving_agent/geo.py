@@ -1,13 +1,15 @@
 """Address -> ZIP and coordinates, and driving distance between two addresses.
 
 With GOOGLE_MAPS_API_KEY set, uses Google Geocoding and Routes. Without it, uses
-free services that need no key: the US Census geocoder and the public OSRM
-router (fine for a demo, not for production traffic). If routing fails, falls
+free services that need no key: the US Census geocoder for street addresses,
+Photon (OpenStreetMap) plus the Census ZIP areas for cities and neighborhoods,
+and the public OSRM router (fine for a demo, not for production traffic). If routing fails, falls
 back to straight-line distance x 1.25, labeled as an estimate.
 """
 
 from __future__ import annotations
 
+import functools
 import math
 import os
 import re
@@ -16,7 +18,11 @@ import httpx
 from pydantic import BaseModel
 
 CENSUS_URL = "https://geocoding.geo.census.gov/geocoder/locations/onelineaddress"
-NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
+PHOTON_URL = "https://photon.komoot.io/api/"
+US_BBOX = "-125,24,-66,50"
+AREA_HEADERS = {"User-Agent": "relocation-agent/1.0 (area lookup)"}
+CENSUS_COORDS_URL = "https://geocoding.geo.census.gov/geocoder/geographies/coordinates"
+ZCTA_LAYER = "2020 Census ZIP Code Tabulation Areas"
 OSRM_URL = "https://router.project-osrm.org/route/v1/driving/{a_lon},{a_lat};{b_lon},{b_lat}"
 ZIP_URL = "https://api.zippopotam.us/us/{zip}"
 CITY_URL = "https://api.zippopotam.us/us/{state}/{city}"
@@ -72,47 +78,106 @@ def _zip_only(zip_code: str) -> Place:
     )
 
 
-def _city_only(location: str) -> Place:
-    """Resolve a city with or without a state to a representative ZIP center."""
-    match = re.fullmatch(r"\s*(.+?)\s*,\s*([A-Za-z]{2})\s*", location)
-    if match:
-        city, state = match.groups()
-        r = httpx.get(CITY_URL.format(state=state.upper(), city=city), timeout=TIMEOUT)
-        if r.status_code == 404:
-            raise GeoError("We couldn't resolve that area. Try a city name, city and state, or ZIP.")
-        r.raise_for_status()
-        places = r.json().get("places", [])
-        exact = next((p for p in places if p.get("place name", "").casefold() == city.casefold()), None)
-        if not exact:
-            raise GeoError("We couldn't resolve that area. Try a city name, city and state, or ZIP.")
-        zip_code = exact["post code"]
-        return Place(
-            matched_address=f"{exact['place name']}, {state.upper()} {zip_code} (city center)",
-            zip=zip_code, lat=float(exact["latitude"]), lon=float(exact["longitude"]),
-        )
+NOT_FOUND = "We couldn't resolve that area. Try a city name, city and state, or ZIP."
 
+
+STATES = {
+    "alabama": "AL", "alaska": "AK", "arizona": "AZ", "arkansas": "AR", "california": "CA", "colorado": "CO",
+    "connecticut": "CT", "delaware": "DE", "district of columbia": "DC", "florida": "FL", "georgia": "GA",
+    "hawaii": "HI", "idaho": "ID", "illinois": "IL", "indiana": "IN", "iowa": "IA", "kansas": "KS",
+    "kentucky": "KY", "louisiana": "LA", "maine": "ME", "maryland": "MD", "massachusetts": "MA",
+    "michigan": "MI", "minnesota": "MN", "mississippi": "MS", "missouri": "MO", "montana": "MT",
+    "nebraska": "NE", "nevada": "NV", "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM",
+    "new york": "NY", "north carolina": "NC", "north dakota": "ND", "ohio": "OH", "oklahoma": "OK",
+    "oregon": "OR", "pennsylvania": "PA", "rhode island": "RI", "south carolina": "SC", "south dakota": "SD",
+    "tennessee": "TN", "texas": "TX", "utah": "UT", "vermont": "VT", "virginia": "VA", "washington": "WA",
+    "west virginia": "WV", "wisconsin": "WI", "wyoming": "WY",
+}
+CITY_TYPES = {"city", "town", "village", "municipality"}
+
+
+@functools.lru_cache(maxsize=256)
+def _city_only(location: str) -> Place:
+    """Resolve a city (with or without a state), neighborhood or region to a representative ZIP.
+
+    One Photon (OpenStreetMap) search finds the place's center, and the Census names the ZIP area
+    that contains it (residential ZIPs only, never a PO box or single-building ZIP). If Photon is
+    unavailable, "City, ST" still works through Zippopotam. Cached, because the page and the server
+    look up the same place more than once.
+    """
     try:
-        r = httpx.get(
-            NOMINATIM_URL,
-            params={"q": f"{location}, USA", "format": "jsonv2", "addressdetails": 1, "limit": 1, "countrycodes": "us"},
-            headers={"User-Agent": "relocation-agent/1.0 (area lookup)"}, timeout=TIMEOUT,
-        )
-        r.raise_for_status()
-        payload = r.json()
-        results = payload if isinstance(payload, list) else []
-    except (httpx.HTTPError, ValueError, TypeError):
-        results = []
-    result = next((item for item in results if item.get("address", {}).get("postcode")), None)
-    if not result:
-        raise GeoError("We couldn't resolve that area. Try a city name, city and state, or ZIP.")
-    address = result["address"]
-    name = address.get("city") or address.get("town") or address.get("village") or location
-    state = address.get("state")
-    zip_code = address["postcode"].split("-")[0]
+        return _photon(location)
+    except GeoError:
+        match = re.fullmatch(r"\s*(.+?)\s*,\s*([A-Za-z]{2})\s*", location)
+        place = _city_center(*match.groups()) if match else None
+        if place:
+            return place
+        raise
+
+
+def _city_center(city: str, state: str) -> Place | None:
+    """The ZIP nearest the middle of all ZIPs Zippopotam lists for this city.
+
+    Place names can differ from what people type ("New York" is listed as "New York City"), so an
+    exact name wins, then a name that starts with what was typed.
+    """
+    state = state.upper()
+    try:
+        r = httpx.get(CITY_URL.format(state=state, city=city), timeout=TIMEOUT)
+        places = r.json().get("places", []) if r.status_code == 200 else []
+    except (httpx.HTTPError, ValueError):
+        return None
+    wanted = city.strip().casefold()
+    names = {p.get("place name", "") for p in places}
+    name = next((n for n in names if n.casefold() == wanted), None) or \
+        min((n for n in names if n.casefold().startswith(wanted)), key=len, default=None)
+    zips = [p for p in places if p.get("place name") == name]
+    if not zips:
+        return None
+    lat = sum(float(p["latitude"]) for p in zips) / len(zips)
+    lon = sum(float(p["longitude"]) for p in zips) / len(zips)
+    center = min(zips, key=lambda p: (float(p["latitude"]) - lat) ** 2 + (float(p["longitude"]) - lon) ** 2)
     return Place(
-        matched_address=f"{name}, {state + ' ' if state else ''}{zip_code} (city center)",
-        zip=zip_code, lat=float(result["lat"]), lon=float(result["lon"]),
+        matched_address=f"{name}, {state} {center['post code']} (city center)",
+        zip=center["post code"], lat=float(center["latitude"]), lon=float(center["longitude"]),
     )
+
+
+def _photon(location: str) -> Place:
+    try:
+        r = httpx.get(PHOTON_URL, params={"q": location, "limit": 1, "lang": "en", "bbox": US_BBOX},
+                      headers=AREA_HEADERS, timeout=TIMEOUT)
+        r.raise_for_status()
+        features = r.json().get("features", [])
+    except (httpx.HTTPError, ValueError, AttributeError):
+        raise GeoError("Area lookup is unavailable right now. Add the state (for example: Chicago, IL) or a ZIP.") from None
+    feature = next((f for f in features if f.get("properties", {}).get("countrycode") == "US"), None)
+    if not feature:
+        raise GeoError(NOT_FOUND)
+    props = feature["properties"]
+    lon, lat = feature["geometry"]["coordinates"]
+    name = props.get("name") or location
+    state = STATES.get(str(props.get("state", "")).casefold(), "")
+    postcode = (props.get("postcode") or "").split(";")[0].split("-")[0].strip()
+    zip_code = _zip_at(lat, lon) or (postcode if re.fullmatch(r"\d{5}", postcode) else "")
+    if not zip_code:
+        raise GeoError(NOT_FOUND)
+    kind = "city center" if props.get("type") in CITY_TYPES or props.get("osm_value") in CITY_TYPES else "area center"
+    return Place(matched_address=f"{name}, {state + ' ' if state else ''}{zip_code} ({kind})",
+                 zip=zip_code, lat=float(lat), lon=float(lon))
+
+
+def _zip_at(lat: float, lon: float) -> str:
+    """The Census ZIP code tabulation area that contains a point."""
+    try:
+        r = httpx.get(CENSUS_COORDS_URL, params={"x": lon, "y": lat, "benchmark": "Public_AR_Current",
+                                                 "vintage": "Current_Current", "layers": ZCTA_LAYER, "format": "json"},
+                      timeout=TIMEOUT)
+        r.raise_for_status()
+        areas = r.json()["result"]["geographies"].get(ZCTA_LAYER, [])
+        return areas[0]["ZCTA5"] if areas else ""
+    except (httpx.HTTPError, ValueError, KeyError, TypeError, IndexError):
+        return ""
 
 
 def _census_geocode(address: str) -> Place:

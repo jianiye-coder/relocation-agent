@@ -24,7 +24,7 @@ def test_intake_uses_a_destination_area_instead_of_asking_for_a_to_zip():
     page = TestClient(web.app).get("/").text
     assert '<label for="to_address">Moving to</label>' in page
     assert "City, neighborhood, or area" in page
-    assert "Lakeview, Chicago; Mountain View; South Bay; or East Bay." in page
+    assert "Start broad" not in page
     assert '<input id="to_zip" name="to_zip" type="hidden">' in page
     assert '<label for="to_zip">' not in page
 
@@ -236,3 +236,10 @@ def test_unfound_address_gets_a_plain_error(intake, monkeypatch):
     assert response.status_code == 422
     assert "Moving from: We couldn&#39;t find that address." in response.text
     assert "String should match pattern" not in response.text and "we can find" not in response.text
+
+
+def test_missing_plan_shows_the_intake_form_with_an_explanation():
+    response = TestClient(web.app).get("/plan/doesnotexist")
+    assert response.status_code == 404
+    assert "That plan is no longer available" in response.text and "Find my options" in response.text
+    assert '"detail"' not in response.text

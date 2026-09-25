@@ -14,6 +14,9 @@
 </section>
 {% endif %}
 
+{% if notice %}
+<div class="notice" role="status">{{ notice }}</div>
+{% endif %}
 {% if errors %}
 <div class="errors" role="alert"><strong>Please fix:</strong><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>
 {% endif %}
@@ -36,8 +39,7 @@
     </div>
     <div class="field">
       <label for="to_address">Moving to</label>
-      <input id="to_address" name="to_address" autocomplete="address-level2" placeholder="City, neighborhood, or area" data-geo="to" required aria-describedby="to_help to_note">
-      <p class="muted geo-note" id="to_help">Start broad — a street address is not needed. City names work without a state, too. For example: Cupertino; Lakeview, Chicago; Mountain View; South Bay; or East Bay.</p>
+      <input id="to_address" name="to_address" autocomplete="address-level2" placeholder="City, neighborhood, or area" data-geo="to" required aria-describedby="to_note">
       <p class="muted geo-note" id="to_note" aria-live="polite"></p>
       <p class="muted geo-note" id="distance_note" aria-live="polite"></p>
     </div>
