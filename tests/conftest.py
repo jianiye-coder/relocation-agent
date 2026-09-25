@@ -66,7 +66,8 @@ def clean_env(monkeypatch, tmp_path):
     """Tests never use real keys from .env, and Gmail accounts go to a temp database."""
     for var in ["FLATKEY_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY", "MOVING_AGENT_MODEL",
                 "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "EMAIL_REDIRECT_TO", "GOOGLE_MAPS_API_KEY", "TOKEN_ENCRYPTION_KEY",
-                "WARP_API_KEY", "WARP_PRODUCTION_API_KEY", "NREL_API_KEY", "BROADBAND_API_KEY", "FMCSA_WEB_KEY", "ENABLE_UNOFFICIAL_ADAPTERS", "ENABLE_VOICE_INTAKE", "ENABLE_PHOTO_INVENTORY"]:
+                "WARP_API_KEY", "WARP_PRODUCTION_API_KEY", "NREL_API_KEY", "BROADBAND_API_KEY", "FMCSA_WEB_KEY", "ENABLE_UNOFFICIAL_ADAPTERS", "ENABLE_VOICE_INTAKE", "ENABLE_PHOTO_INVENTORY",
+                "ACCESS_CODE", "VERCEL", "KV_REST_API_URL", "KV_REST_API_TOKEN", "UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN"]:
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("EMAIL_MODE", "outbox")
     monkeypatch.setenv("OUTBOX_DIR", str(tmp_path / "outbox"))

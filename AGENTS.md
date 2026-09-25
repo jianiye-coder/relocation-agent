@@ -44,7 +44,7 @@ The LLM is picked from whichever key is set: `FLATKEY_API_KEY` -> Claude Sonnet 
 | `moving_agent/accounts.py` | Per-user Gmail OAuth (`gmail.send` + `openid email`), encrypted refresh tokens in SQLite |
 | `moving_agent/inventory.py`, `truecost.py`, `timeline.py`, `listings.py`, `geo.py` | Deterministic inventory, all-in cost, backward move schedule, rental-risk and geocoding/distance modules |
 | `moving_agent/drafts.py`, `emailer.py` | Deterministic quote/listing drafts and Gmail API, SMTP or local-outbox delivery |
-| `moving_agent/web/` | FastAPI app, session state and Jinja screens for intake, plan/chat, approval, listing check, sent view and Gmail connect callback |
+| `moving_agent/web/` | FastAPI app, session state (`store.py`: in memory locally, Upstash Redis on Vercel), access code and Jinja screens for intake, plan/chat, approval, listing check, sent view and Gmail connect callback |
 | `evals/` | Pydantic Evals harness: LA -> SF cases, deterministic evaluators and reports (`python -m evals.run`) |
 | `tests/` | pytest; email tests use a real local SMTP server; external APIs are faked |
 

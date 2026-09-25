@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import os
 import secrets
 import uuid
@@ -23,6 +25,7 @@ from ..models import HomeSize, Intake
 from ..adapters import AdapterError, ErrorCode, FMCSAAdapter, QuoteCache, RegistrySource, default_registry
 from ..inventory import estimate as estimate_inventory
 from ..listings import check as check_listing_rules
+from .store import session_store
 from .views import option_views, price_notes, timeline_view
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
@@ -73,16 +76,71 @@ class Session:
     listings: dict[str, dict] = field(default_factory=dict)  # candidate address -> where to contact the landlord
 
 
-# In-memory store is enough for a demo; swap for Postgres later.
-SESSIONS: dict[str, Session] = {}
+def _attach(session: Session) -> Session:
+    """A plan loaded from Redis comes back without offer sources; give it the app's."""
+    session.deps.sources = SOURCES
+    return session
+
+
+# A dict locally (one long-running process); Redis on Vercel, where requests can land on different instances.
+SESSIONS = session_store(_attach)
+
+
+# ---- access code ----
+
+ACCESS_COOKIE = "access"
+OPEN_PATHS = {"/unlock"}
+
+
+def _access_code() -> str:
+    """Set ACCESS_CODE on a public deployment so only people you give it to can run plans (and spend LLM credits)."""
+    return os.getenv("ACCESS_CODE", "").strip()
+
+
+def _access_token(code: str) -> str:
+    return hmac.new(code.encode(), b"relocation-agent access", hashlib.sha256).hexdigest()
+
+
+def _unlocked(request: Request, code: str) -> bool:
+    return hmac.compare_digest(request.cookies.get(ACCESS_COOKIE, ""), _access_token(code))
+
+
+def _safe_next(path: str) -> str:
+    return path if path.startswith("/") and not path.startswith("//") else "/"
+
+
+@app.get("/unlock", response_class=HTMLResponse)
+def unlock_form(request: Request, next: str = "/"):
+    return templates.TemplateResponse(request, "unlock.html", {"next": _safe_next(next), "error": ""})
+
+
+@app.post("/unlock", response_class=HTMLResponse)
+def unlock(request: Request, code: str = Form(""), next: str = Form("/")):
+    expected = _access_code()
+    if expected and not hmac.compare_digest(code.strip(), expected):
+        return templates.TemplateResponse(request, "unlock.html", {"next": _safe_next(next), "error": "That code doesn't match."},
+                                          status_code=401)
+    response = RedirectResponse(_safe_next(next), status_code=303)
+    if expected:
+        response.set_cookie(ACCESS_COOKIE, _access_token(expected), httponly=True, samesite="lax", secure=request.url.scheme == "https",
+                            max_age=60 * 60 * 24 * 30)
+    return response
 
 
 # ---- sessions ----
 
 @app.middleware("http")
 async def ensure_sid(request: Request, call_next):
+    code = _access_code()
+    if code and request.url.path not in OPEN_PATHS and not _unlocked(request, code):
+        if request.method == "GET":
+            return RedirectResponse("/unlock?" + urlencode({"next": request.url.path}), status_code=303)
+        return JSONResponse({"detail": "Enter the access code first."}, status_code=401)
     request.state.sid = request.cookies.get(SID_COOKIE) or secrets.token_urlsafe(18)
+    request.state.touched = {}  # plans read or created in this request, saved back once it's handled
     response = await call_next(request)
+    for rid, session in request.state.touched.items():
+        SESSIONS[rid] = session
     if not request.cookies.get(SID_COOKIE):
         response.set_cookie(SID_COOKIE, request.state.sid, httponly=True, samesite="lax", max_age=60 * 60 * 24 * 30)
     return response
@@ -312,6 +370,7 @@ async def plan(
     s = Session(sid=sid, intake=intake, deps=deps, used_llm=model_configured())
     rid = uuid.uuid4().hex[:12]
     SESSIONS[rid] = s
+    request.state.touched[rid] = s
     if s.used_llm:
         prompt = "Plan my move."
         if intake.notes:
@@ -324,13 +383,13 @@ async def plan(
 
 
 class PlanNotFound(Exception):
-    """Plans live in memory, so a server restart (or another browser) loses them."""
+    """A plan from another browser, one that expired, or (without Redis) one lost when the app restarted."""
 
 
 @app.exception_handler(PlanNotFound)
 async def plan_not_found(request: Request, exc: PlanNotFound):
-    context = _form_context([]) | {"notice": "That plan is no longer available: plans are kept only while the app is running, "
-                                             "and it was restarted. Fill in the form again to make a new one."}
+    context = _form_context([]) | {"notice": "That plan is no longer available. It may have expired or been made in another browser. "
+                                             "Fill in the form again to make a new one."}
     return templates.TemplateResponse(request, "intake.html", context, status_code=404)
 
 
@@ -338,6 +397,7 @@ def _session(rid: str, request: Request) -> Session:
     s = SESSIONS.get(rid)
     if not s or s.sid != request.state.sid:
         raise PlanNotFound(rid)
+    request.state.touched[rid] = s
     return s
 
 

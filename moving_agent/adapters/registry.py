@@ -24,7 +24,11 @@ from .base import (
     now,
 )
 
-DEFAULT_CACHE = Path(__file__).resolve().parents[2] / "data" / "cache.db"
+def default_cache_path() -> Path:
+    """Vercel functions can only write under /tmp; the cache there lasts as long as the instance does."""
+    if os.getenv("VERCEL"):
+        return Path("/tmp/relocation-agent/cache.db")
+    return Path(__file__).resolve().parents[2] / "data" / "cache.db"
 log = logging.getLogger(__name__)
 
 
@@ -36,8 +40,8 @@ class QuoteCache:
     make concurrent use safe.
     """
 
-    def __init__(self, path: Path | str = DEFAULT_CACHE):
-        self.path = str(path)
+    def __init__(self, path: Path | str | None = None):
+        self.path = str(path or default_cache_path())
         if self.path != ":memory:":
             Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()

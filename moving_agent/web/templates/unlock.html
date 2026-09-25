@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Enter access code · Relocation agent{% endblock %}
+{% block content %}
+<h1>Enter the access code</h1>
+<p class="lead">This preview is shared with invited testers. Enter the code you were given to plan your move.</p>
+{% if error %}<div class="errors" role="alert">{{ error }}</div>{% endif %}
+<form method="post" action="/unlock" class="card unlock-form">
+  <input type="hidden" name="next" value="{{ next }}">
+  <div class="field"><label for="code">Access code</label><input id="code" name="code" type="password" autocomplete="current-password" required autofocus></div>
+  <div class="actions"><button class="btn btn-primary" type="submit">Continue</button></div>
+</form>
+{% endblock %}
