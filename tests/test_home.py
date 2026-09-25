@@ -115,6 +115,7 @@ def test_rental_listings_normalize_homeharvest_response():
                                    "last_seen_date": "2026-09-23T12:00:00.000Z", "days_on_market": 3, "status": "for_rent",
                                    "latitude": None, "longitude": None,
                                    "photos": ["https://images.example/listing-1.jpg", "https://images.example/listing-2.jpg"],
+                                   "listing_url": "", "contact": None,
                                    "disclaimer": "Data supplied by Realtor.com via HomeHarvest; availability and details can change."}]
     assert captured == {"location": "94110", "listing_type": "for_rent", "return_type": "pydantic",
                         "price_min": 2500, "price_max": 3000, "beds_min": 1, "beds_max": 1,
@@ -136,3 +137,21 @@ def test_rental_listings_accepts_a_city_or_neighborhood():
 def test_rental_listings_requires_a_destination_area():
     result = rental_listings("", scraper=lambda **_: [])
     assert result["available"] is False and "city, neighborhood, area, or ZIP" in result["message"]
+
+
+def test_listing_link_and_contact_come_from_the_listing():
+    item = {"property_url": "https://www.realtor.com/rentals/details/3281-Cesar-Chavez_San-Francisco_CA_94110_M99211-88",
+            "advertisers": {"agent": {"name": "Anthony Lacunza", "phones": None},
+                            "office": {"name": "Intero Real Estate Services",
+                                       "phones": [{"number": "6505891000", "type": "Office", "primary": True}]}}}
+    from moving_agent.home import listing_contact, listing_url
+    assert listing_url(item["property_url"]) == item["property_url"]
+    assert listing_contact(item) == {"name": "Anthony Lacunza", "office": "Intero Real Estate Services", "phone": "(650) 589-1000"}
+    assert listing_contact({"advertisers": None}) is None
+
+
+def test_only_realtor_listing_pages_are_linked():
+    from moving_agent.home import listing_url
+    assert listing_url("https://evil.example/phish") == ""
+    assert listing_url("javascript:alert(1)") == ""
+    assert listing_url(None) == ""
