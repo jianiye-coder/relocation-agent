@@ -84,3 +84,17 @@ def test_plan_steps_render_as_separate_pages(intake):
     assert "Your options" in home.text and "Timeline" not in home.text
     assert "What you're moving" in sell.text and "Listings for things you're selling" in sell.text
     assert "Timeline" in timeline_page.text and "Your options" not in timeline_page.text
+
+
+def test_plan_starts_with_find_home_then_moving_services(intake):
+    from moving_agent.web import app as web
+    from .test_web import form
+
+    client = TestClient(web.app)
+    response = client.post("/plan", data=form(intake))
+    rid = re.search(r"/plan/(\w+)", str(response.url)).group(1)
+    overview = client.get(f"/plan/{rid}")
+    assert overview.status_code == 200
+    assert f'href="/housing?location={intake.to_zip}&amp;rid={rid}"' in overview.text
+    assert "Find a new home" in overview.text
+    assert "Review moving services" in overview.text

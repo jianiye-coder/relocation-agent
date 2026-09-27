@@ -134,9 +134,29 @@ def test_rental_listings_accepts_a_city_or_neighborhood():
     assert result["available"] is True and captured["location"] == "Lakeview, Chicago"
 
 
+def test_rental_listings_passes_exact_bathroom_filter_to_homeharvest():
+    captured = {}
+    result = rental_listings("94110", bathrooms=1.5, scraper=lambda **options: captured.update(options) or [])
+    assert result["available"] is True
+    assert captured["baths_min"] == captured["baths_max"] == 1.5
+
+
 def test_rental_listings_requires_a_destination_area():
     result = rental_listings("", scraper=lambda **_: [])
     assert result["available"] is False and "city, neighborhood, area, or ZIP" in result["message"]
+
+
+def test_rental_listings_uses_injected_provider_contract():
+    class Provider:
+        id = "test-rentals"
+        name = "Test rentals"
+
+        def search(self, **kwargs):
+            assert kwargs["location"] == "South Bay, CA"
+            return {"available": True, "source": self.name, "listings": [{"address": "1 Main St"}]}
+
+    result = rental_listings("South Bay, CA", providers=[Provider()])
+    assert result["source"] == "Test rentals" and result["listings"][0]["address"] == "1 Main St"
 
 
 def test_listing_link_and_contact_come_from_the_listing():

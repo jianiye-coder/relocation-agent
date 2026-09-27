@@ -106,6 +106,23 @@ def test_mover_check_explains_missing_fmcsa_key(monkeypatch):
     assert "Add FMCSA_WEB_KEY to .env" in response.text
 
 
+def test_mover_check_frames_registration_as_scam_safety_check():
+    response = TestClient(web.app).get("/mover-check")
+    assert response.status_code == 200
+    assert "spot scams before you pay" in response.text
+    assert "real, registered carrier" in response.text
+
+
+def test_safety_checks_groups_mover_and_listing_tools():
+    response = TestClient(web.app).get("/safety-checks")
+    assert response.status_code == 200
+    assert 'href="/mover-check"' in response.text
+    assert 'href="/listing-check"' in response.text
+    assert "not find a mover or search rental listings" in response.text
+    assert "does not search for movers" in TestClient(web.app).get("/mover-check").text
+    assert "does not search for rental listings" in TestClient(web.app).get("/listing-check").text
+
+
 def test_candidate_home_controls_live_in_housing_not_intake(intake, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     client = TestClient(web.app)
@@ -201,6 +218,15 @@ def test_housing_accepts_a_city_or_neighborhood_location(monkeypatch):
     assert response.status_code == 200 and captured["location"] == "Lakeview, Chicago"
     for text in ["Destination area", "Lakeview, Chicago", "city, neighborhood, larger area, or ZIP code"]:
         assert text in response.text
+
+
+def test_housing_accepts_bathroom_filter(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(web.home, "rental_listings", lambda **filters: captured.update(filters) or {
+        "available": True, "source": "HomeHarvest", "fetched_at": "2026-09-23T20:00:00+00:00", "listings": []})
+    response = TestClient(web.app).get("/housing?location=94110&bathrooms=1.5")
+    assert response.status_code == 200 and captured["bathrooms"] == 1.5
+    assert "Bathrooms" in response.text and "1.5+ bathroom" in response.text
 
 
 def test_housing_page_has_specific_filter_errors():

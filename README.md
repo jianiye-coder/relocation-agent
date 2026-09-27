@@ -1,91 +1,21 @@
 # Relocation Agent
 
-An open-source planning assistant for US moves, starting with Los Angeles → San Francisco. Compare illustrative moving-service prices, vehicle shipping versus driving, inventory estimates, rental-listing risks, true cost, and a backward timeline. Email delivery is disabled in the web app and agent. No booking or payment is available.
+Relocation Agent is an open-source assistant for planning a move in the United States. It turns a move into a set of reviewable decisions: find a rental home, compare trucks, movers, storage and containers, check providers and listings for scam risks, estimate the true cost, and organize the work on a practical timeline.
 
-## Run
+The app combines a conversational agent with deterministic planning code. Prices, distance calculations, budget ranking, risk checks and dates stay explainable in code, while provider adapters attach live or sample data with a source, timestamp and confidence level. Nothing is booked, paid for or sent to a business automatically.
 
-```bash
-python3 -m venv .venv
-.venv/bin/pip install -e ".[dev]"
-cp .env.example .env
-.venv/bin/uvicorn moving_agent.web.app:app --port 8787
-```
+## Repository structure
 
-Open http://localhost:8787. Choose one LLM provider, or leave all keys empty for deterministic planning. The distribution is `relocation-agent`; imports remain `moving_agent`.
-
-## Feature branches
-
-These features are reviewed separately and are not available on master until their PRs merge:
-
-| Issue | PR | Scope |
-| --- | --- | --- |
-| [#1](https://github.com/jianiye-coder/relocation-agent/issues/1) | [#8](https://github.com/jianiye-coder/relocation-agent/pull/8) | Up to two candidate addresses, commute destination/mode/time |
-| [#2](https://github.com/jianiye-coder/relocation-agent/issues/2) | [#10](https://github.com/jianiye-coder/relocation-agent/pull/10) | Photo extraction, editable item review, deterministic volume/weight |
-| [#3](https://github.com/jianiye-coder/relocation-agent/issues/3) | [#7](https://github.com/jianiye-coder/relocation-agent/pull/7) | Warp quote adapter |
-| [#4](https://github.com/jianiye-coder/relocation-agent/issues/4) | [#9](https://github.com/jianiye-coder/relocation-agent/pull/9) | Candidate commute and unavailable utilities states |
-
-Photo and candidate-decision PRs currently target the intake branch. Merge/rebase intake first. Review limitations in [MVP acceptance](docs/mvp-acceptance.md) before treating the demo as production-ready.
-
-## Settings
-
-Set only your preferred LLM key. If several are set, selection priority is Flatkey → Anthropic → Google/Gemini → OpenAI. `MOVING_AGENT_MODEL` overrides the model name; select a model compatible with your key. Photos require image support from that model.
-
-| Variable | Use / fallback |
+| Path | Purpose |
 | --- | --- |
-| `FLATKEY_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_API_KEY` / `OPENAI_API_KEY` | Choose one. With no key, use text inventory and deterministic planning. |
-| `MOVING_AGENT_MODEL` | Optional provider-prefixed model override. |
-| `GOOGLE_MAPS_API_KEY` | Google geocoding/distance and candidate commute. Without it, street addresses use the Census geocoder, cities/neighborhoods/regions use Photon (OpenStreetMap) plus the Census ZIP area at their center (Zippopotam if Photon is down), and distance uses OSRM; candidate commute reports unavailable. |
-| None | The Find a home page retrieves active rentals and photos from Realtor.com through [HomeHarvest](https://github.com/ZacharyHampton/HomeHarvest). It is an unofficial scrape, so availability can change and searches may be rate-limited. |
-| `FMCSA_WEB_KEY` | Carrier lookup. Missing credentials produce a typed unavailable/auth state. |
-| `WARP_MODE` | `sandbox` (default) or `production`; production must be selected explicitly. No booking is called. |
-| `WARP_API_KEY` | Sandbox credential used when `WARP_MODE=sandbox`; `wak_test_` quotes are mock data. |
-| `WARP_PRODUCTION_API_KEY` | Live credential used only when `WARP_MODE=production`; quote assumptions remain labeled. |
-| `ENABLE_UNOFFICIAL_ADAPTERS` | Comma-separated website adapters to turn on: `public_storage`, `uhaul`, `budget_truck`. Off by default. They read the same public pages the providers' own search boxes use (Public Storage city pages; U-Haul and Budget one-way rate searches), never reserve anything, and report a 403 or bot check as `blocked` instead of working around it. Their terms of service have not been reviewed, so keep them for local demos. Once any real price exists for a service, sample prices for that service are dropped. Penske is not included: its rate API sits behind bot protection. |
-| `QUOTE_CACHE=off` | Disable quote cache, useful for isolated verification. |
+| `moving_agent/web/` | FastAPI routes, sessions, forms and Jinja templates for the intake, housing, plan, safety-check and approval screens. |
+| `moving_agent/agent.py` | Agent orchestration, tool calls, alternatives, summaries and the deterministic no-LLM fallback. |
+| `moving_agent/adapters/` | Shared provider contracts plus quote, housing-adjacent service, vehicle, storage, truck, container and FMCSA adapters. |
+| `moving_agent/home.py` | Rental search provider interface, HomeHarvest/Realtor.com listings, photos, commute and explicit unavailable states. |
+| `moving_agent/planner.py` and `providers/` | Explainable offer combinations, sample catalog rates and budget-aware plan selection. |
+| `moving_agent/inventory.py`, `truecost.py`, `timeline.py` | Deterministic volume/weight estimates, move-in cost calculations and backward scheduling. |
+| `moving_agent/listings.py` and `mover`/`listing` checks | Scam-signal checks for rental listings and FMCSA registration checks for movers. |
+| `tests/` and `evals/` | Offline regression tests, adapter contracts, fixtures and deterministic agent evaluations. |
+| `docs/` and `DESIGN.md` | Product requirements, UI guidance and design decisions. |
 
-There is no implemented FCC or NREL/OpenEI address-level adapter. Do not add a `BROADBAND_API_KEY` or assume that an NREL key enables utility lookup. Internet, electricity and schools currently report unavailable on each candidate home (PR #9). Crime scoring is not implemented.
-
-Delivery configuration and standalone scripts remain in the repository for future work, but the MVP web app and agent cannot draft, approve, or send quote-request emails. Do not run standalone delivery scripts during demo verification.
-
-## Deploy to Vercel
-
-The repo deploys as one Vercel Function (FastAPI preset). `pyproject.toml` points Vercel at the app (`[tool.vercel] entrypoint = "moving_agent.web.app:app"`), and `vercel.json` leaves tests, evals and docs out of the bundle.
-
-1. **Import** the GitHub repo in Vercel. Keep the FastAPI preset and root directory `./`.
-2. **Add Redis** before the first real use: Vercel → Storage (Marketplace) → **Upstash Redis** → connect it to this project. It adds `KV_REST_API_URL` / `KV_REST_API_TOKEN` (or `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`). Without it, plans live in one function instance's memory and users will see "That plan is no longer available" when a request lands on another instance. Plans expire after 7 days.
-3. **Environment variables** (Production):
-   - `FLATKEY_API_KEY` and `MOVING_AGENT_MODEL=flatkey:claude-sonnet-5`
-   - `ACCESS_CODE`: a shared code for testers. Every page asks for it first, so strangers can't spend your LLM credits.
-   - Optional: `GOOGLE_MAPS_API_KEY` (commute), `FMCSA_WEB_KEY` (mover check)
-   - Leave out email/SMTP/Gmail variables, `ENABLE_UNOFFICIAL_ADAPTERS` (terms not reviewed; datacenter IPs are more likely to be blocked) and the voice/photo flags.
-4. **Redeploy** after changing variables.
-
-On Vercel the quote cache lives in `/tmp` (the only writable path) and lasts as long as an instance does. Vercel's Hobby plan is for personal, non-commercial use.
-
-## Modules
-
-| Module | Responsibility |
-| --- | --- |
-| `models.py`, `web/` | Intake validation, session, forms, plan and chat |
-| `agent.py` | Tool selection, constraints, alternatives, derived costs/timeline |
-| `adapters/` | Normalized quotes, source/confidence metadata, cache and errors |
-| `providers/catalog.py`, `planner.py` | Illustrative rates and deterministic combinations |
-| `inventory.py` | Item/room volume, weight and special items |
-| `photo_inventory.py` (PR #10) | Model item extraction, bounded temporary uploads, editable review |
-| `home.py` (PR #9) | Google Routes and explicit unavailable utilities states |
-| `truecost.py`, `timeline.py`, `listings.py`, `geo.py` | Deterministic decision support |
-| `accounts.py`, `emailer.py` | Preserved delivery modules, disconnected from MVP |
-| `tests/`, `evals/` | Fixtures, offline regression tests, scripted harness and optional live model evals |
-
-## Verification
-
-```bash
-.venv/bin/python -m pytest -q
-.venv/bin/python -m evals.run --model scripted
-```
-
-Tests fake external HTTP and fail accidental real HTTP. Standalone email-module tests use local SMTP only. Scripted evals use deterministic sources even if API keys exist in the shell. Both commands run in CI without secrets.
-
-Six LA→SF scenarios check budget honesty, exclusions, alternatives, valid dates, no email delivery, grounded amounts, vehicle costs, and timeline. The scripted score verifies tool plumbing and the deterministic policy, not live model intelligence. Optional `python -m evals.run --model <provider:model>` evaluates your configured LLM and may incur provider charges; provider quote sources remain deterministic. Failed assertions or crashed cases exit nonzero. Reports are ignored under `evals/reports/`.
-
-Read the standalone [PRD](docs/PRD.md) and [fixture guide](tests/fixtures/README.md).
+Read the standalone [PRD](docs/PRD.md) and [fixture guide](tests/fixtures/README.md) for the product scope and test data conventions.
