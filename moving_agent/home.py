@@ -2,7 +2,7 @@
 from __future__ import annotations
 import os
 from datetime import date, datetime, time, timezone
-from typing import Any, Callable
+from typing import Any, Callable, Protocol
 from zoneinfo import ZoneInfo
 import httpx
 
@@ -80,6 +80,17 @@ def _as_iso(value: Any) -> str | None:
 LISTING_HOST = "https://www.realtor.com/"
 
 
+class HousingProvider(Protocol):
+    """Contract every rental-listing source implements."""
+
+    id: str
+    name: str
+
+    def search(self, *, location: str, min_rent: int | None = None, max_rent: int | None = None,
+               bedrooms: int | None = None, bathrooms: float | None = None, limit: int = 12,
+               scraper: Callable[..., list[Any]] | None = None) -> dict: ...
+
+
 def listing_url(value: Any) -> str:
     """The listing's own Realtor.com page, where the landlord or agent is contacted. Anything else is dropped."""
     url = str(value or "")
@@ -113,58 +124,80 @@ def _display_value(value: Any) -> str | None:
     return str(value).replace("_", " ").title()
 
 
+class HomeHarvestProvider:
+    """Realtor.com rentals through HomeHarvest, behind the shared provider contract."""
+
+    id = "homeharvest_realtor"
+    name = HOMEHARVEST_SOURCE
+
+    def search(self, *, location: str, min_rent: int | None = None, max_rent: int | None = None,
+               bedrooms: int | None = None, bathrooms: float | None = None, limit: int = 12,
+               scraper: Callable[..., list[Any]] | None = None) -> dict:
+        """Return current Realtor.com rentals through HomeHarvest.
+
+        HomeHarvest is an unofficial scraper of Realtor.com. Its live data can
+        change or become unavailable without notice, so callers must show its
+        source and never substitute sample homes.
+        """
+        location = location.strip()
+        if not location:
+            return _unavailable(self.name, "Enter a city, neighborhood, area, or ZIP code.") | {"listings": []}
+
+        if scraper is None:
+            try:
+                from homeharvest import scrape_property
+            except ImportError:
+                return _unavailable(self.name, "HomeHarvest is not installed. Install the project dependencies and try again.") | {"listings": []}
+            scraper = scrape_property
+        options: dict[str, Any] = {
+            "location": location, "listing_type": "for_rent", "return_type": "pydantic",
+            "price_min": min_rent, "price_max": max_rent,
+            "beds_min": bedrooms, "beds_max": bedrooms,
+            "baths_min": bathrooms, "baths_max": bathrooms,
+            "sort_by": "list_date", "sort_direction": "desc", "limit": min(max(limit, 1), 50),
+            "extra_property_data": True, "parallel": False,
+        }
+        options = {key: value for key, value in options.items() if value is not None}
+        try:
+            records = scraper(**options)
+            if not isinstance(records, list):
+                raise ValueError("HomeHarvest response was not a list")
+            listings = []
+            for item in records:
+                address, description = _field(item, "address"), _field(item, "description")
+                formatted_address = _field(address, "formatted_address") or _field(address, "full_line")
+                if not formatted_address:
+                    continue
+                listings.append({
+                    "id": _field(item, "listing_id") or _field(item, "property_id", ""),
+                    "address": formatted_address, "rent": _field(item, "list_price"),
+                    "bedrooms": _field(description, "beds"), "bathrooms": _field(description, "baths_full"),
+                    "square_feet": _field(description, "sqft"),
+                    "property_type": _display_value(_field(description, "style") or _field(description, "type")),
+                    "listed_date": _as_iso(_field(item, "list_date")), "last_seen_date": _as_iso(_field(item, "last_update_date")),
+                    "days_on_market": _field(item, "days_on_mls"), "status": _field(item, "status"),
+                    "latitude": _field(item, "latitude"), "longitude": _field(item, "longitude"),
+                    "photos": _listing_photos(item),
+                    "listing_url": listing_url(_field(item, "property_url")), "contact": listing_contact(item),
+                    "disclaimer": "Data supplied by Realtor.com via HomeHarvest; availability and details can change.",
+                })
+            return {"available": True, "source": self.name, "fetched_at": _now(), "listings": listings}
+        except Exception:
+            return _unavailable(self.name, "Live Realtor.com rental listings are unavailable right now. Try again shortly.") | {"listings": []}
+
+
+HOUSING_PROVIDERS: list[HousingProvider] = [HomeHarvestProvider()]
+
+
 def rental_listings(location: str, min_rent: int | None = None, max_rent: int | None = None,
                     bedrooms: int | None = None, bathrooms: float | None = None, limit: int = 12,
-                    scraper: Callable[..., list[Any]] | None = None) -> dict:
-    """Return current Realtor.com rentals through HomeHarvest.
-
-    HomeHarvest is an unofficial scraper of Realtor.com. Its live data can
-    change or become unavailable without notice, so callers must show its
-    source and never substitute sample homes.
-    """
-    location = location.strip()
-    if not location:
-        return _unavailable(HOMEHARVEST_SOURCE, "Enter a city, neighborhood, area, or ZIP code.") | {"listings": []}
-
-    if scraper is None:
-        try:
-            from homeharvest import scrape_property
-        except ImportError:
-            return _unavailable(HOMEHARVEST_SOURCE, "HomeHarvest is not installed. Install the project dependencies and try again.") | {"listings": []}
-        scraper = scrape_property
-    options: dict[str, Any] = {
-        "location": location, "listing_type": "for_rent", "return_type": "pydantic",
-        "price_min": min_rent, "price_max": max_rent,
-        "beds_min": bedrooms, "beds_max": bedrooms,
-        "baths_min": bathrooms, "baths_max": bathrooms,
-        "sort_by": "list_date", "sort_direction": "desc", "limit": min(max(limit, 1), 50),
-        # The listing detail call supplies the full photo gallery used by the page.
-        "extra_property_data": True, "parallel": False,
-    }
-    options = {key: value for key, value in options.items() if value is not None}
-    try:
-        records = scraper(**options)
-        if not isinstance(records, list):
-            raise ValueError("HomeHarvest response was not a list")
-        listings = []
-        for item in records:
-            address, description = _field(item, "address"), _field(item, "description")
-            formatted_address = _field(address, "formatted_address") or _field(address, "full_line")
-            if not formatted_address:
-                continue
-            listings.append({
-                "id": _field(item, "listing_id") or _field(item, "property_id", ""),
-                "address": formatted_address, "rent": _field(item, "list_price"),
-                "bedrooms": _field(description, "beds"), "bathrooms": _field(description, "baths_full"),
-                "square_feet": _field(description, "sqft"),
-                "property_type": _display_value(_field(description, "style") or _field(description, "type")),
-                "listed_date": _as_iso(_field(item, "list_date")), "last_seen_date": _as_iso(_field(item, "last_update_date")),
-                "days_on_market": _field(item, "days_on_mls"), "status": _field(item, "status"),
-                "latitude": _field(item, "latitude"), "longitude": _field(item, "longitude"),
-                "photos": _listing_photos(item),
-                "listing_url": listing_url(_field(item, "property_url")), "contact": listing_contact(item),
-                "disclaimer": "Data supplied by Realtor.com via HomeHarvest; availability and details can change.",
-            })
-        return {"available": True, "source": HOMEHARVEST_SOURCE, "fetched_at": _now(), "listings": listings}
-    except Exception:
-        return _unavailable(HOMEHARVEST_SOURCE, "Live Realtor.com rental listings are unavailable right now. Try again shortly.") | {"listings": []}
+                    scraper: Callable[..., list[Any]] | None = None,
+                    providers: list[HousingProvider] | None = None) -> dict:
+    """Search all configured rental providers through one stable interface."""
+    configured = providers or HOUSING_PROVIDERS
+    if not configured:
+        return _unavailable("Rental providers", "No rental listing provider is configured.") | {"listings": []}
+    # Each provider may return its own unavailable state; the first available
+    # result wins for now. A later multi-provider merge can use this same contract.
+    return configured[0].search(location=location, min_rent=min_rent, max_rent=max_rent,
+                                 bedrooms=bedrooms, bathrooms=bathrooms, limit=limit, scraper=scraper)

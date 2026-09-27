@@ -146,6 +146,19 @@ def test_rental_listings_requires_a_destination_area():
     assert result["available"] is False and "city, neighborhood, area, or ZIP" in result["message"]
 
 
+def test_rental_listings_uses_injected_provider_contract():
+    class Provider:
+        id = "test-rentals"
+        name = "Test rentals"
+
+        def search(self, **kwargs):
+            assert kwargs["location"] == "South Bay, CA"
+            return {"available": True, "source": self.name, "listings": [{"address": "1 Main St"}]}
+
+    result = rental_listings("South Bay, CA", providers=[Provider()])
+    assert result["source"] == "Test rentals" and result["listings"][0]["address"] == "1 Main St"
+
+
 def test_listing_link_and_contact_come_from_the_listing():
     item = {"property_url": "https://www.realtor.com/rentals/details/3281-Cesar-Chavez_San-Francisco_CA_94110_M99211-88",
             "advertisers": {"agent": {"name": "Anthony Lacunza", "phones": None},
