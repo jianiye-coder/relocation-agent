@@ -49,6 +49,17 @@ def test_option_included_services_keep_provider_links():
     assert included[0]["provider_url"] == "https://www.budgettruck.com/"
 
 
+def test_live_quote_link_prefers_route_specific_source_url():
+    rec = plan([offer("truck", "U-Haul", "15' Truck one-way", 455, 4.0)])
+    rec.offers[0] = rec.offers[0].model_copy(update={
+        "source": "https://www.uhaul.com/Reservations/RatesTrucks/?route=90012-94110",
+        "contact_url": "https://www.uhaul.com/Truck-Rentals/",
+        "price_kind": "firm_quote",
+    })
+    included = option_views([rec], budget=1500, requested_date=MOVE)[0]["included"]
+    assert included[0]["provider_url"].endswith("route=90012-94110")
+
+
 def test_over_budget_note():
     v = option_views([plan([offer("truck", "Budget Truck", "12 ft", 761.25, 3.8)], budget=90)], 90, MOVE)[0]
     assert not v["within_budget"] and v["budget_note"] == "$671 over your $90 budget"

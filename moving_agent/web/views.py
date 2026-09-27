@@ -95,7 +95,13 @@ def option_views(plans: list[Plan], budget: int, requested_date: date) -> list[d
                 "service": o.service,
                 "service_label": _service(o),
                 "provider": o.provider,
-                "provider_url": o.contact_url or (o.source if o.source.startswith("http") else None),
+                # Live adapters put the exact, route/date-specific quote page in
+                # ``source`` (for example U-Haul's redirected rates URL). Prefer
+                # it over the provider's generic landing page so the user can
+                # continue with the quote we just looked up. Sample quotes keep
+                # using their official contact URL.
+                "provider_url": (o.source if str(o.source).startswith(("http://", "https://"))
+                                 else o.contact_url),
                 "title": o.title,
                 "price": f"${o.price_usd:,.2f}",
                 "rating": o.rating,

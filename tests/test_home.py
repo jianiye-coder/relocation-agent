@@ -134,6 +134,13 @@ def test_rental_listings_accepts_a_city_or_neighborhood():
     assert result["available"] is True and captured["location"] == "Lakeview, Chicago"
 
 
+def test_rental_listings_passes_exact_bathroom_filter_to_homeharvest():
+    captured = {}
+    result = rental_listings("94110", bathrooms=1.5, scraper=lambda **options: captured.update(options) or [])
+    assert result["available"] is True
+    assert captured["baths_min"] == captured["baths_max"] == 1.5
+
+
 def test_rental_listings_requires_a_destination_area():
     result = rental_listings("", scraper=lambda **_: [])
     assert result["available"] is False and "city, neighborhood, area, or ZIP" in result["message"]

@@ -114,7 +114,7 @@ def _display_value(value: Any) -> str | None:
 
 
 def rental_listings(location: str, min_rent: int | None = None, max_rent: int | None = None,
-                    bedrooms: int | None = None, limit: int = 12,
+                    bedrooms: int | None = None, bathrooms: float | None = None, limit: int = 12,
                     scraper: Callable[..., list[Any]] | None = None) -> dict:
     """Return current Realtor.com rentals through HomeHarvest.
 
@@ -136,6 +136,7 @@ def rental_listings(location: str, min_rent: int | None = None, max_rent: int | 
         "location": location, "listing_type": "for_rent", "return_type": "pydantic",
         "price_min": min_rent, "price_max": max_rent,
         "beds_min": bedrooms, "beds_max": bedrooms,
+        "baths_min": bathrooms, "baths_max": bathrooms,
         "sort_by": "list_date", "sort_direction": "desc", "limit": min(max(limit, 1), 50),
         # The listing detail call supplies the full photo gallery used by the page.
         "extra_property_data": True, "parallel": False,
