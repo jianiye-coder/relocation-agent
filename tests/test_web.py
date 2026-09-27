@@ -113,6 +113,16 @@ def test_mover_check_frames_registration_as_scam_safety_check():
     assert "real, registered carrier" in response.text
 
 
+def test_safety_checks_groups_mover_and_listing_tools():
+    response = TestClient(web.app).get("/safety-checks")
+    assert response.status_code == 200
+    assert 'href="/mover-check"' in response.text
+    assert 'href="/listing-check"' in response.text
+    assert "not find a mover or search rental listings" in response.text
+    assert "does not search for movers" in TestClient(web.app).get("/mover-check").text
+    assert "does not search for rental listings" in TestClient(web.app).get("/listing-check").text
+
+
 def test_candidate_home_controls_live_in_housing_not_intake(intake, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     client = TestClient(web.app)

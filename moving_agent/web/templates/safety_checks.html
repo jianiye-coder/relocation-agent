@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Scam checks · Relocation agent{% endblock %}
+{% block content %}
+<h1>Scam checks</h1>
+<p class="lead">Use these checks after you find a mover or rental listing. They help you confirm whether an offer looks real before you send money—not find a mover or search rental listings for you.</p>
+<div class="notice" role="note"><strong>Verify before you pay.</strong> A clean check is only one safety signal. Meet or call the provider, verify the address and paperwork, and never wire money or pay a deposit before you have independently confirmed who you are dealing with.</div>
+<div class="glance-grid">
+  <section class="card">
+    <span class="eyebrow">Moving companies</span>
+    <h2>Check a mover</h2>
+    <p class="muted">Confirm a company’s USDOT/MC registration with FMCSA and spot a possible fake or unregistered mover.</p>
+    <a class="btn btn-primary btn-sm" href="/mover-check">Check a mover</a>
+  </section>
+  <section class="card">
+    <span class="eyebrow">Rental listings</span>
+    <h2>Check a listing</h2>
+    <p class="muted">Paste a listing to check for deposit scams, copied text, missing addresses, suspicious pricing, and other warning signs.</p>
+    <a class="btn btn-primary btn-sm" href="/listing-check">Check a listing</a>
+  </section>
+</div>
+{% endblock %}

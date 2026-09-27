@@ -2,7 +2,8 @@
 {% block title %}Check a listing{% endblock %}
 {% block content %}
 <h1>Check a rental listing</h1>
-<p class="lead">Paste a listing before you pay anything. We look for scam signs: wire or app deposits before a viewing, no showings, below-market rent, copied text, no address.</p>
+<p class="lead">Already found a rental listing? Paste it here to check for scam signs before you pay. This does not search for rental listings.</p>
+<p class="muted"><a href="/safety-checks">← All scam checks</a></p>
 <form method="post" action="/listing-check">
   <div class="field"><label for="text">Listing text</label><textarea id="text" name="text" rows="8" required>{{ form.text or "" }}</textarea></div>
   <div class="row">

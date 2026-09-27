@@ -450,6 +450,12 @@ def listing_check_form(request: Request):
     return templates.TemplateResponse(request, "listing_check.html", {"result": None, "form": {}})
 
 
+@app.get("/safety-checks", response_class=HTMLResponse)
+def safety_checks(request: Request):
+    """Safety tools for listings the user has already found elsewhere."""
+    return templates.TemplateResponse(request, "safety_checks.html", {})
+
+
 # ---- housing search ----
 
 def _housing_filters(location: str, min_rent: str, max_rent: str, bedrooms: str, bathrooms: str) -> tuple[dict, list[str]]:
