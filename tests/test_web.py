@@ -106,6 +106,13 @@ def test_mover_check_explains_missing_fmcsa_key(monkeypatch):
     assert "Add FMCSA_WEB_KEY to .env" in response.text
 
 
+def test_mover_check_frames_registration_as_scam_safety_check():
+    response = TestClient(web.app).get("/mover-check")
+    assert response.status_code == 200
+    assert "spot scams before you pay" in response.text
+    assert "real, registered carrier" in response.text
+
+
 def test_candidate_home_controls_live_in_housing_not_intake(intake, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     client = TestClient(web.app)
