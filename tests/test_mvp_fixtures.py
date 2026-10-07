@@ -1,4 +1,4 @@
-"""Credential-free planning and disabled-delivery regressions."""
+"""Credential-free planning and disabled quote-delivery regressions (the arrival pack is tested in test_errands.py)."""
 import json
 from pathlib import Path
 

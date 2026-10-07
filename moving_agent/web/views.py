@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import date
 
 from ..models import Offer, Plan
+from ..errands import Errand
 from ..timeline import Task
 
 SERVICE_LABELS = {"truck": "Truck", "labor": "Movers", "storage": "Storage", "container": "Container"}
@@ -150,15 +151,23 @@ def _phase(days_before: int) -> int:
     return 4
 
 
-def timeline_view(tasks: list[Task], move_date: date, today: date | None = None) -> dict:
-    """Group tasks into phases and place a 'today' marker at its chronological position."""
+def timeline_view(tasks: list[Task], move_date: date, today: date | None = None, errands: list[Errand] | None = None) -> dict:
+    """Group tasks into phases and place a 'today' marker at its chronological position.
+
+    A task linked to an errand carries the errand (its document and status); a done errand
+    is never shown as overdue."""
     today = today or date.today()
+    by_id = {e.id: e for e in errands or []}
     groups: list[list[dict]] = [[] for _ in PHASES]
     for t in sorted(tasks, key=lambda t: t.due):
         days_before = (move_date - t.due).days
-        state = "move" if t.due == move_date else "overdue" if t.overdue else "today" if t.due == today else "upcoming"
+        errand = by_id.get(getattr(t, "errand", ""))
+        done = errand is not None and errand.status == "done"
+        state = ("move" if t.due == move_date else "done" if done else "overdue" if t.overdue
+                 else "today" if t.due == today else "upcoming")
         groups[_phase(days_before)].append({
             "kind": "task", "due": t.due, "state": state, "title": t.title, "detail": t.detail, "source": t.source,
+            "errand": errand,
             "month": f"{t.due:%b}".upper(), "day": t.due.day, "weekday": f"{t.due:%a}",
             "when": ("" if days_before == 0 else f"{days_before} days before" if days_before > 1
                      else "1 day before" if days_before == 1 else f"{-days_before} day{'s' if days_before != -1 else ''} after"),
@@ -192,4 +201,6 @@ def timeline_view(tasks: list[Task], move_date: date, today: date | None = None)
         "overdue": sum(p["overdue"] for p in phases),
         "move_day": _day(move_date),
         "days_left": days_left,
+        "errands": {status: sum(e.status == status for e in by_id.values())
+                    for status in ("prepared_for_user", "needs_user_action", "done")},
     }

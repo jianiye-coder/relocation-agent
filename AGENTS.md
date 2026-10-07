@@ -43,6 +43,7 @@ The LLM is picked from whichever key is set: `FLATKEY_API_KEY` -> Claude Sonnet 
 | `moving_agent/adapters/public_storage.py`, `uhaul.py`, `budget_truck.py`, `scrape.py` | Opt-in website adapters (`ENABLE_UNOFFICIAL_ADAPTERS`) for storage and one-way truck prices; shared client, error mapping and bot-check detection in `scrape.py` |
 | `moving_agent/accounts.py` | Per-user Gmail OAuth (`gmail.send` + `openid email`), encrypted refresh tokens in SQLite |
 | `moving_agent/inventory.py`, `truecost.py`, `timeline.py`, `listings.py`, `geo.py` | Deterministic inventory, all-in cost, backward move schedule, rental-risk and geocoding/distance modules |
+| `moving_agent/errands.py` | Errand roster, prepared documents (call scripts, letters, checklists) with `<placeholders>`, honest statuses, timeline linking and the arrival-pack email draft |
 | `moving_agent/drafts.py`, `emailer.py` | Deterministic quote/listing drafts and Gmail API, SMTP or local-outbox delivery |
 | `moving_agent/web/` | FastAPI app, session state (`store.py`: in memory locally, Upstash Redis on Vercel), access code and Jinja screens for intake, plan/chat, approval, listing check, sent view and Gmail connect callback |
 | `evals/` | Pydantic Evals harness: LA -> SF cases, deterministic evaluators and reports (`python -m evals.run`) |
@@ -55,9 +56,9 @@ The LLM is picked from whichever key is set: `FLATKEY_API_KEY` -> Claude Sonnet 
 3. **Nothing reaches a real business by accident.** Sample contacts use the reserved `.example` domain. For real-send tests, set `EMAIL_REDIRECT_TO` to your own address.
 4. **Every price is explainable.** Each `Offer` carries `price_basis` (how it was calculated) and `source`. Show both in the UI.
 5. **Label sample data honestly.** Until live adapters exist, the UI says prices come from a sample catalog of illustrative rates.
-6. **Only the `gmail.send` scope** (plus `openid email` to learn the address). Never request Gmail read scopes. Each user sends from their own connected Gmail; tokens stay encrypted.
-7. **Every price carries source, timestamp and confidence** (`Quote`), and confidence never exceeds the cap for its price kind.
-8. **Run the evals** (`python -m evals.run`) after changing the agent's instructions or tools, and keep them at 100%.
+6. **Every price carries source, timestamp and confidence** (`Quote`), and confidence never exceeds the cap for its price kind.
+7. **Run the evals** (`python -m evals.run`) after changing the agent's instructions or tools, and keep them at 100%.
+8. **Errands are prepared, never performed.** `errands.py` builds documents from the intake in code; the model never writes them. Only the user marks an errand done. The arrival pack goes only to the intake email (or `EMAIL_REDIRECT_TO`), after a preview and a click, once per plan.
 9. **Keep tests green** and add a test with every behavior change. External services (Census, OSRM, Google, Gmail) are faked in tests.
 
 ## Naming
