@@ -143,7 +143,7 @@
   .agent-fab-panel p { margin: 6px 0 14px; }
   @media (max-width: 640px) { .agent-fab { right: 16px; bottom: 16px; } }
   .approval { border: 2px solid var(--ink); }
-  .approval .actions form { margin: 0; }
+  .approval .actions form, .actions form { margin: 0; }
   details.email-card summary { cursor: pointer; font-size: 14px; }
   .steps { list-style: none; padding: 0; margin: 0; counter-reset: step; }
   .step { position: relative; padding: 10px 0 10px 36px; border-top: 1px solid var(--hairline-soft); font-size: 14px; }
@@ -289,6 +289,17 @@
   .tl-item.is-move .tl-card { border: 2px solid var(--primary); padding: 12px 14px; }
   .tl-item.is-move .tl-title { font-size: 18px; }
   .tl-item.is-today .tl-node { background: var(--ink); }
+  .tl-item.is-done .tl-node { background: var(--ink); }
+  .tl-item.is-done .tl-title { color: var(--muted); text-decoration: line-through; }
+  .tag.ready { background: var(--canvas); box-shadow: inset 0 0 0 1px var(--ink); color: var(--ink); }
+  .tag.blocked { background: #fff0ed; color: var(--error); }
+  .errand { margin-top: 8px; }
+  .errand summary { display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; font-weight: 500; cursor: pointer; text-decoration: underline; }
+  .errand pre { max-width: 100%; overflow-wrap: anywhere; }
+  .errand-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .errand-actions form { margin: 0; }
+  .pack-panel { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; justify-content: space-between; }
+  .pack-panel p { margin: 0; }
   .tl-today { position: relative; display: grid; grid-template-columns: var(--date-w) var(--node-col) 1fr; align-items: center; margin: 4px 0 14px; }
   .tl-today::before { content: ""; grid-column: 2 / 4; grid-row: 1; height: 0; margin-left: calc(var(--node-col) / 2); border-top: 2px dashed var(--ink); }
   .tl-today::after { content: ""; grid-column: 2; grid-row: 1; justify-self: center; z-index: 1; width: 10px; height: 10px; border-radius: var(--r-full); background: var(--ink); }

@@ -176,6 +176,14 @@
 <section class="block timeline" aria-labelledby="tl-h">
   <h2 id="tl-h">Timeline</h2>
   <p class="muted section-lead">Planned backward from move day, <strong>{{ tl.move_day }}</strong>{% if tl.days_left > 0 %} ({{ tl.days_left }} day{{ "s" if tl.days_left != 1 }} away){% endif %}.{% if tl.overdue %} <span class="warn-text">{{ tl.overdue }} step{{ "s" if tl.overdue != 1 }} should already be done.</span>{% endif %}</p>
+  {% set ec = tl.errands %}
+  {% if ec.prepared_for_user or ec.needs_user_action or ec.done %}
+  <div class="notice pack-panel">
+    <p><strong>{{ ec.prepared_for_user + ec.needs_user_action + ec.done }} errands come with a document</strong> (call script, letter or checklist).
+      {{ ec.prepared_for_user }} ready{% if ec.needs_user_action %}, <span class="warn-text">{{ ec.needs_user_action }} need{{ "s" if ec.needs_user_action == 1 }} details from you</span>{% endif %}{% if ec.done %}, {{ ec.done }} done{% endif %}. You do each one yourself; nothing is sent to anyone.</p>
+    <a class="btn btn-secondary btn-sm" href="/plan/{{ rid }}/arrival-pack">{% if arrival_pack and arrival_pack.ok %}Documents emailed{% else %}Email all documents to me{% endif %}</a>
+  </div>
+  {% endif %}
   <ol class="tl">
     {% for phase in tl.phases %}
     <li class="tl-phase">
@@ -185,13 +193,31 @@
       {% if item.kind == "today" %}
       <li class="tl-today"><span class="tl-today-pill">{{ item.label }}</span></li>
       {% else %}
-      <li class="tl-item is-{{ item.state }}">
+      <li class="tl-item is-{{ item.state }}"{% if item.errand %} id="errand-{{ item.errand.id }}"{% endif %}>
         <div class="tl-date"><span class="tl-mon">{{ item.month }}</span><span class="tl-day">{{ item.day }}</span><span class="tl-dow">{{ item.weekday }}</span></div>
         <span class="tl-node" aria-hidden="true"></span>
         <div class="tl-card">
           <p class="tl-title">{{ item.title }}{% if item.state == "overdue" %} <span class="tag warn">Overdue</span>{% endif %}</p>
           {% if item.when %}<p class="tl-when">{{ item.when }}</p>{% endif %}
           {% if item.detail or item.source %}<p class="muted tl-detail">{{ item.detail }}{% if item.source %} <a href="{{ item.source }}" target="_blank" rel="noopener">Official page</a>{% endif %}</p>{% endif %}
+          {% set e = item.errand %}
+          {% if e %}
+          <div class="errand">
+            <span class="tag {{ 'blocked' if e.status == 'needs_user_action' else 'ready' if e.status == 'prepared_for_user' else '' }}">{{ e.status_label }}</span>
+            {% if e.blockers %}<p class="muted tl-detail">Add to finish it: {{ e.blockers|join(", ") }}. Until then it shows &lt;placeholders&gt;.</p>{% endif %}
+            <details>
+              <summary>{{ e.kind_label }}</summary>
+              <pre id="doc-{{ e.id }}">{{ e.document }}</pre>
+              <div class="errand-actions">
+                <button type="button" class="btn btn-secondary btn-sm" data-copy="doc-{{ e.id }}">Copy</button>
+                <form method="post" action="/plan/{{ rid }}/errands/{{ e.id }}">
+                  <input type="hidden" name="done" value="{{ '0' if e.status == 'done' else '1' }}">
+                  <button class="btn btn-secondary btn-sm">{{ "Mark not done" if e.status == "done" else "Mark done" }}</button>
+                </form>
+              </div>
+            </details>
+          </div>
+          {% endif %}
         </div>
       </li>
       {% endif %}
@@ -199,6 +225,12 @@
     {% endfor %}
   </ol>
 </section>
+<script>
+  document.querySelectorAll("[data-copy]").forEach((b) => b.addEventListener("click", async () => {
+    const text = document.getElementById(b.dataset.copy).innerText;
+    try { await navigator.clipboard.writeText(text); b.textContent = "Copied"; } catch { b.textContent = "Select the text to copy"; }
+  }));
+</script>
 {% endif %}
 {% endif %}
 

@@ -127,4 +127,5 @@ def sender_from_env() -> Sender:
             password=os.getenv("SMTP_PASSWORD"),
             starttls=os.getenv("SMTP_STARTTLS", "true").lower() == "true",
         )
-    return OutboxSender(Path(os.getenv("OUTBOX_DIR", Path(__file__).resolve().parents[1] / "outbox")))
+    default = Path("/tmp/relocation-agent/outbox") if os.getenv("VERCEL") else Path(__file__).resolve().parents[1] / "outbox"
+    return OutboxSender(Path(os.getenv("OUTBOX_DIR", default)))  # Vercel can only write under /tmp
