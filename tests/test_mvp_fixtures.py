@@ -1,5 +1,6 @@
 """Credential-free planning and disabled-delivery regressions."""
 import json
+from datetime import date, timedelta
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -11,6 +12,9 @@ FIXTURES = Path(__file__).parent / "fixtures"
 def test_full_intake_fixture_plans_with_derived_results():
     profile = json.loads((FIXTURES / "intake/la_to_sf.json").read_text())
     profile["pets"] = ",".join(profile["pets"])
+    # The recorded dates have passed and the form only plans upcoming moves; keep their 2-day gap.
+    move = date.today() + timedelta(days=30)
+    profile["move_date"], profile["lease_end"] = move.isoformat(), (move - timedelta(days=2)).isoformat()
     client = TestClient(web.app)
     response = client.post("/plan", data=profile)
     assert response.status_code == 200

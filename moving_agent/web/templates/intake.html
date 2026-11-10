@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Plan your move{% endblock %}
 {% block content %}
+{# `form` holds what the user sent when the form comes back with errors; it is empty on a fresh visit. #}
+{% set f = form or {} %}
 <h1>Plan your move</h1>
 <p class="lead">Tell us about your move. We'll compare truck, movers and storage options that fit your dates and budget.</p>
 
@@ -20,13 +22,14 @@
 {% if errors %}
 <div class="errors" role="alert"><strong>Please fix:</strong><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>
 {% endif %}
+{% set needs = f.needs if "needs" in f else ["truck", "labor"] %}
 
 <form method="post" action="/plan" data-busy="The agent is planning your move (about 30 seconds)...">
   <section class="block">
     <h2>About you</h2>
     <div class="row">
-      <div class="field"><label for="name">Name</label><input id="name" name="name" autocomplete="name" required></div>
-      <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required></div>
+      <div class="field"><label for="name">Name</label><input id="name" name="name" autocomplete="name" required value="{{ f.name or '' }}"></div>
+      <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required value="{{ f.email or '' }}"></div>
     </div>
   </section>
 
@@ -34,12 +37,12 @@
     <h2>Where and when</h2>
     <div class="field">
       <label for="from_address">Moving from</label>
-      <input id="from_address" name="from_address" autocomplete="street-address" placeholder="Street, city, state" data-geo="from" required>
+      <input id="from_address" name="from_address" autocomplete="street-address" placeholder="Street, city, state" data-geo="from" required value="{{ f.from_address or '' }}">
       <p class="muted geo-note" id="from_note" aria-live="polite"></p>
     </div>
     <div class="field">
       <label for="to_address">Moving to</label>
-      <input id="to_address" name="to_address" autocomplete="address-level2" placeholder="City, neighborhood, or area" data-geo="to" required aria-describedby="to_note">
+      <input id="to_address" name="to_address" autocomplete="address-level2" placeholder="City, neighborhood, or area" data-geo="to" required aria-describedby="to_note" value="{{ f.to_address or '' }}">
       <p class="muted geo-note" id="to_note" aria-live="polite"></p>
       <p class="muted geo-note" id="distance_note" aria-live="polite"></p>
     </div>
@@ -47,11 +50,11 @@
     <input id="from_zip" name="from_zip" type="hidden">
     <input id="to_zip" name="to_zip" type="hidden">
     <input id="distance_miles" name="distance_miles" type="hidden">
-    <div class="field"><label for="move_date">Move date</label><input id="move_date" name="move_date" type="date" min="{{ today }}" required></div>
+    <div class="field"><label for="move_date">Move date</label><input id="move_date" name="move_date" type="date" min="{{ today }}" required value="{{ f.move_date or '' }}"></div>
     <div class="field">
       <label for="flexible_days">How flexible is the date? <span class="hint">· days earlier or later</span></label>
       <select id="flexible_days" name="flexible_days">
-        <option value="0">Not flexible</option><option value="1">1 day</option><option value="3">3 days</option><option value="7">1 week</option>
+        {% for value, label in [("0", "Not flexible"), ("1", "1 day"), ("3", "3 days"), ("7", "1 week")] %}<option value="{{ value }}"{% if f.flexible_days == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
       </select>
     </div>
   </section>
@@ -61,39 +64,40 @@
     <div class="field">
       <label for="home_size">Home size</label>
       <select id="home_size" name="home_size">
-        {% for h in home_sizes %}<option value="{{ h }}">{{ h }}</option>{% endfor %}
+        {% for h in home_sizes %}<option value="{{ h }}"{% if f.home_size == h %} selected{% endif %}>{{ h }}</option>{% endfor %}
       </select>
     </div>
     <div class="row">
-      <div class="field"><label for="from_floor">Current floor</label><input id="from_floor" name="from_floor" type="number" min="0" value="1"></div>
-      <div class="field"><label for="to_floor">New floor <span class="hint">· optional</span></label><input id="to_floor" name="to_floor" type="number" min="0" value="1"></div>
+      <div class="field"><label for="from_floor">Current floor</label><input id="from_floor" name="from_floor" type="number" min="0" max="60" value="{{ f.from_floor or 1 }}"></div>
+      <div class="field"><label for="to_floor">New floor <span class="hint">· optional</span></label><input id="to_floor" name="to_floor" type="number" min="0" max="60" value="{{ f.to_floor or 1 }}"></div>
     </div>
     <div class="pills">
-      <label class="pill"><input type="checkbox" name="from_elevator" value="true"><span>Elevator at current home</span></label>
-      <label class="pill"><input type="checkbox" name="to_elevator" value="true"><span>Elevator at new home</span></label>
+      <label class="pill"><input type="checkbox" name="from_elevator" value="true"{% if f.from_elevator %} checked{% endif %}><span>Elevator at current home</span></label>
+      <label class="pill"><input type="checkbox" name="to_elevator" value="true"{% if f.to_elevator %} checked{% endif %}><span>Elevator at new home</span></label>
     </div>
   </section>
 
   <section class="block">
     <h2>Household</h2>
     <div class="row">
-      <div class="field"><label for="household_size">People moving</label><input id="household_size" name="household_size" type="number" min="1" max="12" value="1"></div>
-      <div class="field"><label for="pets">Pets <span class="hint">· comma-separated, e.g. cat, dog</span></label><input id="pets" name="pets"></div>
+      <div class="field"><label for="household_size">People moving</label><input id="household_size" name="household_size" type="number" min="1" max="12" value="{{ f.household_size or 1 }}"></div>
+      <div class="field"><label for="pets">Pets <span class="hint">· comma-separated, e.g. cat, dog</span></label><input id="pets" name="pets" value="{{ f.pets or '' }}"></div>
     </div>
     <label>Vehicles</label>
     <div class="pills" role="group" aria-label="Vehicles">
-      <label class="pill"><input type="checkbox" name="vehicles" value="car"><span>Car</span></label>
-      <label class="pill"><input type="checkbox" name="vehicles" value="suv"><span>SUV</span></label>
-      <label class="pill"><input type="checkbox" name="vehicles" value="truck"><span>Pickup truck</span></label>
-      <label class="pill"><input type="checkbox" name="vehicles" value="motorcycle"><span>Motorcycle</span></label>
+      <label class="pill"><input type="checkbox" name="vehicles" value="car"{% if "car" in (f.vehicles or []) %} checked{% endif %}><span>Car</span></label>
+      <label class="pill"><input type="checkbox" name="vehicles" value="suv"{% if "suv" in (f.vehicles or []) %} checked{% endif %}><span>SUV</span></label>
+      <label class="pill"><input type="checkbox" name="vehicles" value="truck"{% if "truck" in (f.vehicles or []) %} checked{% endif %}><span>Pickup truck</span></label>
+      <label class="pill"><input type="checkbox" name="vehicles" value="motorcycle"{% if "motorcycle" in (f.vehicles or []) %} checked{% endif %}><span>Motorcycle</span></label>
     </div>
     <div class="row" style="margin-top:16px">
-      <div class="field"><label for="lease_end">Current lease ends <span class="hint">· optional</span></label><input id="lease_end" name="lease_end" type="date"></div>
-      <div class="field"><label for="monthly_rent">Expected rent at the new place ($/month)</label><input id="monthly_rent" name="monthly_rent" type="number" min="0"></div>
+      <div class="field"><label for="lease_end">Current lease ends <span class="hint">· optional</span></label><input id="lease_end" name="lease_end" type="date" value="{{ f.lease_end or '' }}"></div>
+      <div class="field"><label for="monthly_rent">Expected rent at the new place ($/month)</label><input id="monthly_rent" name="monthly_rent" type="number" min="0" value="{{ f.monthly_rent or '' }}"></div>
     </div>
     <div class="field">
       <label for="inventory_text">What you're moving <span class="hint">· rooms or items, one per line (optional, better than home size)</span></label>
-      <textarea id="inventory_text" name="inventory_text" rows="4" placeholder="2 bedrooms&#10;living room&#10;kitchen&#10;upright piano&#10;boxes x 20"></textarea>
+      <textarea id="inventory_text" name="inventory_text" rows="4" placeholder="2 bedrooms&#10;living room&#10;kitchen&#10;upright piano&#10;boxes x 20">
+{{ f.inventory_text or '' }}</textarea>
     </div>
     {% if photo_inventory %}
     <div class="field">
@@ -114,15 +118,15 @@
   <section class="block">
     <h2>What you need</h2>
     <div class="pills" role="group" aria-label="Services">
-      <label class="pill service-pill"><input type="checkbox" name="needs" value="truck" checked><span>Moving truck<small>I’ll drive and load it</small></span></label>
-      <label class="pill service-pill"><input type="checkbox" name="needs" value="labor" checked><span>Movers<small>Someone else handles the heavy lifting</small></span></label>
-      <label class="pill service-pill"><input type="checkbox" name="needs" value="storage"><span>Storage<small>I need a place to keep things</small></span></label>
-      <label class="pill service-pill"><input type="checkbox" name="needs" value="container"><span>Container<small>I’ll load it; the provider transports it</small></span></label>
+      <label class="pill service-pill"><input type="checkbox" name="needs" value="truck"{% if "truck" in needs %} checked{% endif %}><span>Moving truck<small>I’ll drive and load it</small></span></label>
+      <label class="pill service-pill"><input type="checkbox" name="needs" value="labor"{% if "labor" in needs %} checked{% endif %}><span>Movers<small>Someone else handles the heavy lifting</small></span></label>
+      <label class="pill service-pill"><input type="checkbox" name="needs" value="storage"{% if "storage" in needs %} checked{% endif %}><span>Storage<small>I need a place to keep things</small></span></label>
+      <label class="pill service-pill"><input type="checkbox" name="needs" value="container"{% if "container" in needs %} checked{% endif %}><span>Container<small>I’ll load it; the provider transports it</small></span></label>
     </div>
     <p class="muted" style="margin:12px 0 0">We compare U-Haul, Budget and Penske trucks; TaskRabbit and HireAHelper movers; Extra Space, Public Storage and CubeSmart storage; PODS and U-Pack containers.</p>
     <div class="row" style="margin-top:16px">
-      <div class="field"><label for="storage_months">Storage months <span class="hint">· if you need storage</span></label><input id="storage_months" name="storage_months" type="number" min="0" max="24" value="0"></div>
-      <div class="field"><label for="budget_usd">Total budget ($)</label><input id="budget_usd" name="budget_usd" type="number" min="1" required></div>
+      <div class="field"><label for="storage_months">Storage months <span class="hint">· if you need storage</span></label><input id="storage_months" name="storage_months" type="number" min="0" max="24" value="{{ f.storage_months or 0 }}"></div>
+      <div class="field"><label for="budget_usd">Total budget ($)</label><input id="budget_usd" name="budget_usd" type="number" min="1" required value="{{ f.budget_usd or '' }}"></div>
     </div>
   </section>
 
@@ -130,7 +134,8 @@
     <h2>Selling before you move <span class="hint" style="font-size:14px;font-weight:400">· optional</span></h2>
     <div class="field">
       <label for="items_to_sell">Items to sell, one per line</label>
-      <textarea id="items_to_sell" name="items_to_sell" rows="3" placeholder="IKEA sofa&#10;Bookshelf"></textarea>
+      <textarea id="items_to_sell" name="items_to_sell" rows="3" placeholder="IKEA sofa&#10;Bookshelf">
+{{ f.items_to_sell or '' }}</textarea>
     </div>
   </section>
 
@@ -138,7 +143,8 @@
     <h2>Additional details <span class="hint" style="font-size:14px;font-weight:400">· optional</span></h2>
     <div class="field">
       <label for="notes">Anything else?</label>
-      <textarea id="notes" name="notes" rows="2"></textarea>
+      <textarea id="notes" name="notes" rows="2">
+{{ f.notes or '' }}</textarea>
     </div>
   </section>
 
