@@ -38,6 +38,20 @@ def test_cases_are_la_to_sf():
     assert len(CASES) >= 5 and all(c.inputs.from_zip == "90012" and c.inputs.to_zip == "94110" for c in CASES)
 
 
+def test_case_dates_are_upcoming_and_keep_their_weekdays():
+    from datetime import date
+
+    from evals.cases import SATURDAY, WEDNESDAY, _upcoming_wednesday
+
+    assert WEDNESDAY.weekday() == 2 and SATURDAY.weekday() == 5
+    assert all(c.inputs.move_date > date.today() for c in CASES)
+    # Any day of the week lands on a Wednesday 35-41 days later.
+    for offset in range(7):
+        start = date(2026, 11, 9 + offset)
+        wednesday = _upcoming_wednesday(start)
+        assert wednesday.weekday() == 2 and 35 <= (wednesday - start).days <= 41
+
+
 def test_scripted_run_end_to_end():
     from pydantic_evals import Dataset
 
