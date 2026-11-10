@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 from pydantic import BaseModel, Field
 from pydantic_evals import Case
@@ -14,7 +14,21 @@ LA_TO_SF = dict(
     from_address="200 N Spring St, Los Angeles, CA", to_address="2000 Mission St, San Francisco, CA",
     from_zip="90012", to_zip="94110", distance_miles=382,
 )
-WEDNESDAY, SATURDAY = date(2026, 10, 14), date(2026, 10, 17)
+
+
+def _upcoming_wednesday(today: date | None = None) -> date:
+    """A Wednesday 5-6 weeks out, so no case plans a move that has already happened.
+
+    The agent is told today's date; a past move date would make live-model runs
+    reason about an overdue move. Sample prices don't depend on the calendar date,
+    only on the weekday, so scripted results stay the same from day to day.
+    """
+    d = (today or date.today()) + timedelta(days=35)
+    return d + timedelta(days=(2 - d.weekday()) % 7)
+
+
+WEDNESDAY = _upcoming_wednesday()
+SATURDAY = WEDNESDAY + timedelta(days=3)
 
 
 class Expect(BaseModel):
@@ -52,7 +66,7 @@ CASES = [
          Expect(plan_within_budget=True, full_picture=True),
          notes="I'm bringing my car. Rent at the new place will be about $3,000.",
          home_size="1br", move_date=WEDNESDAY, needs=["truck", "labor"], budget_usd=1600,
-         vehicles=["car"], monthly_rent=3000, lease_end=date(2026, 10, 12)),
+         vehicles=["car"], monthly_rent=3000, lease_end=WEDNESDAY - timedelta(days=2)),
     case("weekend_no_labor_no_flex",
          Expect(excluded_providers=["TaskRabbit"], no_plan_possible=True),
          notes="Don't use TaskRabbit. The date is fixed.",
