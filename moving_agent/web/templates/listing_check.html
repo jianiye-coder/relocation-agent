@@ -4,10 +4,11 @@
 <h1>Check a rental listing</h1>
 <p class="lead">Already found a rental listing? Paste it here to check for scam signs before you pay. This does not search for rental listings.</p>
 <p class="muted"><a href="/safety-checks">← All scam checks</a></p>
+{% if errors %}<div class="errors" role="alert"><strong>Please fix:</strong><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
 <form method="post" action="/listing-check">
   <div class="field"><label for="text">Listing text</label><textarea id="text" name="text" rows="8" required>{{ form.text or "" }}</textarea></div>
   <div class="row">
-    <div class="field"><label for="price_usd">Rent ($/month)</label><input id="price_usd" name="price_usd" type="number" min="0" value="{{ form.price_usd or '' }}"></div>
+    <div class="field"><label for="price_usd">Rent ($/month)</label><input id="price_usd" name="price_usd" inputmode="decimal" autocomplete="off" placeholder="e.g. $2,450" value="{{ form.price_usd or '' }}"></div>
     <div class="field"><label for="bedrooms">Bedrooms <span class="hint">· 0 for studio</span></label><input id="bedrooms" name="bedrooms" type="number" min="0" max="6" value="{{ form.bedrooms or '' }}"></div>
   </div>
   <div class="field"><label for="address">Address <span class="hint">· if the listing gives one</span></label><input id="address" name="address" value="{{ form.address or '' }}"></div>

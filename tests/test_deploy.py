@@ -114,3 +114,28 @@ def test_vercel_entrypoint_points_at_the_fastapi_app():
     config = tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text())
     module, attr = config["tool"]["vercel"]["entrypoint"].split(":")
     assert isinstance(getattr(import_module(module), attr), FastAPI)
+
+
+def test_redis_outage_shows_a_try_again_page(intake, monkeypatch):
+    def down(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("no route to host")
+    store = RedisSessions("https://example.upstash.io", "secret-token", attach=web._attach,
+                          client=httpx.Client(transport=httpx.MockTransport(down)))
+    monkeypatch.setattr(web, "SESSIONS", store)
+    client = TestClient(web.app)
+    for response in (client.get("/plan/abc"), client.post("/plan", data=form(intake))):
+        assert response.status_code == 503 and "Plans are unavailable right now" in response.text
+
+
+def test_redis_error_status_is_an_outage_too(monkeypatch):
+    store = RedisSessions("https://example.upstash.io", "secret-token", attach=web._attach,
+                          client=httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(500, text="oops"))))
+    monkeypatch.setattr(web, "SESSIONS", store)
+    response = TestClient(web.app).get("/plan/abc")
+    assert response.status_code == 503 and "Plans are unavailable right now" in response.text
+
+
+def test_plan_saved_by_an_older_deploy_counts_as_expired(redis_sessions):
+    redis_sessions.data["relocation-agent:plan:old"] = "bm90IGEgcGlja2xl"  # base64 of "not a pickle"
+    response = TestClient(web.app).get("/plan/old")
+    assert response.status_code == 404 and "That plan is no longer available" in response.text

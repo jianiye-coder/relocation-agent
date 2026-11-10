@@ -5,6 +5,7 @@ Runs in CI (see .github/workflows/tests.yml) with no network and no credentials.
 import asyncio
 import json
 import re
+from datetime import date, timedelta
 from io import BytesIO
 from pathlib import Path
 
@@ -44,7 +45,9 @@ def test_two_homes_with_sourced_commutes(monkeypatch):
     real_commute = home.commute
     monkeypatch.setattr(home, "commute", lambda origin, dest, mode, departure=None: real_commute(origin, dest, mode, client=client, departure=departure))
     profile = fixture("intake/la_to_sf.json")
-    profile.update(pets="cat")
+    # The recorded dates have passed and the form only plans upcoming moves; keep their 2-day gap.
+    move = date.today() + timedelta(days=30)
+    profile.update(pets="cat", move_date=move.isoformat(), lease_end=(move - timedelta(days=2)).isoformat())
     browser = TestClient(web.app)
     response = browser.post("/plan", data=profile)
     rid = re.search(r"/plan/(\w+)", str(response.url)).group(1)

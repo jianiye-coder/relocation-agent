@@ -8,12 +8,14 @@ import os
 import secrets
 import uuid
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from urllib.parse import urlencode
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ValidationError
@@ -25,7 +27,7 @@ from ..models import HomeSize, Intake
 from ..adapters import AdapterError, ErrorCode, FMCSAAdapter, QuoteCache, RegistrySource, default_registry
 from ..inventory import estimate as estimate_inventory
 from ..listings import check as check_listing_rules
-from .store import session_store
+from .store import StoreUnavailable, session_store
 from .views import option_views, price_notes, timeline_view
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
@@ -139,11 +141,26 @@ async def ensure_sid(request: Request, call_next):
     request.state.sid = request.cookies.get(SID_COOKIE) or secrets.token_urlsafe(18)
     request.state.touched = {}  # plans read or created in this request, saved back once it's handled
     response = await call_next(request)
-    for rid, session in request.state.touched.items():
-        SESSIONS[rid] = session
+    try:
+        for rid, session in request.state.touched.items():
+            SESSIONS[rid] = session
+    except StoreUnavailable:
+        return _store_unavailable(request)
     if not request.cookies.get(SID_COOKIE):
         response.set_cookie(SID_COOKIE, request.state.sid, httponly=True, samesite="lax", max_age=60 * 60 * 24 * 30)
     return response
+
+
+def _store_unavailable(request: Request):
+    return templates.TemplateResponse(request, "message.html", {
+        "title": "Plans are unavailable right now",
+        "text": "We couldn't reach the database that keeps plans, so this step wasn't saved. Try again in a minute."},
+        status_code=503)
+
+
+@app.exception_handler(StoreUnavailable)
+async def store_unavailable(request: Request, exc: StoreUnavailable):
+    return _store_unavailable(request)
 
 
 # Plain-language messages for fields whose raw validator text would confuse users.
@@ -151,12 +168,43 @@ FIELD_MESSAGES = {
     "from_zip": "Moving from: enter a street address, city or ZIP we can find.",
     "to_zip": "Moving to: enter a city, neighborhood or ZIP we can find.",
     "distance_miles": "Enter where you're moving from and to so we can work out the distance.",
+    "name": "Name: enter your name.",
+    "email": "Email: enter an address like you@example.com.",
+    "move_date": "Move date: choose a date.",
+    "flexible_days": "Date flexibility: choose one of the options.",
+    "home_size": "Home size: choose one of the options.",
+    "from_floor": "Current floor: enter a whole number from 0 to 60.",
+    "to_floor": "New floor: enter a whole number from 0 to 60.",
+    "household_size": "People moving: enter a whole number from 1 to 12.",
+    "vehicles": "Vehicles: choose from the listed options.",
+    "lease_end": "Current lease ends: enter a date, or leave it blank.",
+    "monthly_rent": "Expected rent: enter a whole dollar amount, or leave it blank.",
+    "needs": "What you need: choose at least one service.",
+    "storage_months": "Storage months: enter a whole number from 0 to 24.",
+    "budget_usd": "Total budget: enter a whole dollar amount above $0.",
 }
 
 
 def _readable(error: dict) -> str:
-    field = str(error["loc"][0]) if error.get("loc") else ""
-    return FIELD_MESSAGES.get(field) or f"{'.'.join(str(p) for p in error['loc'])}: {error['msg']}"
+    loc = [str(p) for p in error.get("loc") or () if p != "body"]  # FastAPI form errors start with "body"
+    field = loc[0] if loc else ""
+    return FIELD_MESSAGES.get(field) or f"{'.'.join(loc) or 'Form'}: {error['msg']}"
+
+
+# What the intake form sends, so a form with errors comes back filled in. The hidden ZIP and
+# distance fields are left out: they're worked out again from the addresses on the next submit.
+INTAKE_TEXT_FIELDS = ("name", "email", "from_address", "to_address", "move_date", "flexible_days", "home_size",
+                      "from_floor", "to_floor", "household_size", "pets", "lease_end", "monthly_rent",
+                      "inventory_text", "storage_months", "budget_usd", "items_to_sell", "notes")
+INTAKE_CHECKBOXES = ("from_elevator", "to_elevator")
+INTAKE_MULTI = ("needs", "vehicles")
+
+
+def _submitted(form) -> dict:
+    values: dict = {key: str(form.get(key) or "") for key in INTAKE_TEXT_FIELDS}
+    values |= {key: bool(form.get(key)) for key in INTAKE_CHECKBOXES}
+    values |= {key: [str(v) for v in form.getlist(key)] for key in INTAKE_MULTI}
+    return values
 
 
 def _flag(name: str) -> bool:
@@ -173,9 +221,20 @@ def photo_inventory_enabled() -> bool:
     return _flag("ENABLE_PHOTO_INVENTORY")
 
 
-def _form_context(errors: list[str]) -> dict:
+def _form_context(errors: list[str], form: dict | None = None) -> dict:
     return {"home_sizes": [h.value for h in HomeSize], "errors": errors, "today": date.today().isoformat(),
-            "voice_intake": voice_intake_enabled(), "photo_inventory": photo_inventory_enabled()}
+            "voice_intake": voice_intake_enabled(), "photo_inventory": photo_inventory_enabled(), "form": form or {}}
+
+
+@app.exception_handler(RequestValidationError)
+async def form_errors(request: Request, exc: RequestValidationError):
+    """A malformed intake (empty budget, a date that isn't one) shows the form again, filled in, instead of raw JSON."""
+    if request.method == "POST" and request.url.path == "/plan":
+        errors = list(dict.fromkeys(_readable(e) for e in exc.errors()))
+        body = exc.body if hasattr(exc.body, "getlist") else None  # FastAPI hands back the parsed form
+        context = _form_context(errors, _submitted(body) if body is not None else None)
+        return templates.TemplateResponse(request, "intake.html", context, status_code=422)
+    return await request_validation_exception_handler(request, exc)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -339,6 +398,16 @@ async def plan(
     )
     if not distance_miles and not geo_errors:
         geo_errors.append("Enter where you're moving from and to so we can work out the distance.")
+    form_errors: list[str] = []
+    # A day of slack: the server's date can be ahead of the user's evening.
+    if move_date < date.today() - timedelta(days=1):
+        form_errors.append("Move date: choose today or a later date.")
+    rent: int | None = None
+    if monthly_rent.strip():
+        try:
+            rent = int(monthly_rent)
+        except ValueError:
+            form_errors.append(FIELD_MESSAGES["monthly_rent"])
     try:
         intake = Intake(
             name=name, email=email, from_address=from_address.strip(), to_address=to_address.strip(),
@@ -349,14 +418,18 @@ async def plan(
             items_to_sell=[i for i in items_to_sell.splitlines() if i.strip()], notes=notes,
             inventory_text=inventory_text, household_size=household_size,
             pets=[p.strip() for p in pets.split(",") if p.strip()], vehicles=vehicles,
-            lease_end=lease_end or None, monthly_rent=int(monthly_rent) if monthly_rent.strip() else None,
+            lease_end=lease_end or None, monthly_rent=rent,
         )
-    except (ValidationError, ValueError) as exc:
-        errs = exc.errors() if isinstance(exc, ValidationError) else [{"loc": ("form",), "msg": str(exc)}]
+    except ValidationError as exc:
+        errs = exc.errors()
         if geo_errors:  # the address errors already explain the missing ZIPs and distance
             errs = [e for e in errs if not e.get("loc") or e["loc"][0] not in ("from_zip", "to_zip", "distance_miles")]
-        errors = geo_errors + [_readable(e) for e in errs]
-        return templates.TemplateResponse(request, "intake.html", _form_context(errors), status_code=422)
+        form_errors += [_readable(e) for e in errs]
+        intake = None
+    if intake is None or geo_errors or form_errors:
+        errors = list(dict.fromkeys(geo_errors + form_errors))
+        return templates.TemplateResponse(request, "intake.html", _form_context(errors, _submitted(await request.form())),
+                                          status_code=422)
 
     inventory = None
     if intake.inventory_text.strip():
@@ -591,12 +664,37 @@ def select_candidate_home(request: Request, rid: str, address: str = Form(...), 
     return RedirectResponse(f"/plan/{rid}/home?home_selected=1", status_code=303)
 
 
+def _listing_numbers(price_usd: str, bedrooms: str) -> tuple[int | None, int | None, list[str]]:
+    """Rent may be typed as "$2,450" or "2450.50"; bedrooms must be a whole number. Blank means unknown."""
+    errors: list[str] = []
+    rent = rooms = None
+    raw_rent = price_usd.strip().removeprefix("$").replace(",", "")
+    if raw_rent:
+        try:
+            rent = round(float(raw_rent))
+            if not 0 <= rent <= 1_000_000:
+                raise ValueError
+        except (ValueError, OverflowError):  # "abc", "nan", "inf"
+            errors.append("Rent: enter the monthly rent in dollars, for example 2450.")
+            rent = None
+    if bedrooms.strip():
+        try:
+            rooms = int(bedrooms)
+            if not 0 <= rooms <= 20:
+                raise ValueError
+        except ValueError:
+            errors.append("Bedrooms: enter a whole number, or 0 for a studio.")
+            rooms = None
+    return rent, rooms, errors
+
+
 @app.post("/listing-check", response_class=HTMLResponse)
 def listing_check(request: Request, text: str = Form(...), price_usd: str = Form(""), bedrooms: str = Form(""), address: str = Form("")):
-    result = check_listing_rules(text, int(price_usd) if price_usd.strip() else None,
-                                 int(bedrooms) if bedrooms.strip() else None, address)
+    rent, rooms, errors = _listing_numbers(price_usd, bedrooms)
+    result = None if errors else check_listing_rules(text, rent, rooms, address)
     return templates.TemplateResponse(request, "listing_check.html", {
-        "result": result, "form": {"text": text, "price_usd": price_usd, "bedrooms": bedrooms, "address": address}})
+        "result": result, "errors": errors,
+        "form": {"text": text, "price_usd": price_usd, "bedrooms": bedrooms, "address": address}}, status_code=422 if errors else 200)
 
 
 # ---- mover vetting ----

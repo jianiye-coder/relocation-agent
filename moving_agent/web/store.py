@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import base64
 import dataclasses
+import logging
 import os
 import pickle
 from collections.abc import Callable
@@ -22,6 +23,11 @@ import httpx
 
 TTL_SECONDS = 7 * 24 * 3600
 KEY_PREFIX = "relocation-agent:plan:"
+log = logging.getLogger(__name__)
+
+
+class StoreUnavailable(Exception):
+    """Redis couldn't be reached or answered with an error; the app shows a "try again" page."""
 
 
 def redis_credentials() -> tuple[str, str] | None:
@@ -42,9 +48,12 @@ class RedisSessions:
         self.headers = {"Authorization": f"Bearer {token}"}
 
     def _command(self, *args: str) -> Any:
-        response = self.client.post(self.url, headers=self.headers, json=list(args))
-        response.raise_for_status()
-        return response.json().get("result")
+        try:
+            response = self.client.post(self.url, headers=self.headers, json=list(args))
+            response.raise_for_status()
+            return response.json().get("result")
+        except (httpx.HTTPError, ValueError) as exc:  # network, 4xx/5xx, or a body that isn't JSON
+            raise StoreUnavailable(f"Upstash {args[0]} failed: {type(exc).__name__}") from exc
 
     def __setitem__(self, rid: str, session: Any) -> None:
         light = dataclasses.replace(session, deps=dataclasses.replace(session.deps, sources=[]))
@@ -55,7 +64,12 @@ class RedisSessions:
         blob = self._command("GET", KEY_PREFIX + rid)
         if not blob:
             return default
-        return self.attach(pickle.loads(base64.b64decode(blob)))
+        try:
+            session = pickle.loads(base64.b64decode(blob))
+        except Exception:  # saved by an older deploy whose classes have since changed
+            log.warning("Dropping plan %s: it can't be loaded by this version of the app", rid, exc_info=True)
+            return default
+        return self.attach(session)
 
     def __getitem__(self, rid: str) -> Any:
         session = self.get(rid)

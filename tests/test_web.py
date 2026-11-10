@@ -283,3 +283,74 @@ def test_missing_plan_shows_the_intake_form_with_an_explanation():
     assert response.status_code == 404
     assert "That plan is no longer available" in response.text and "Find my options" in response.text
     assert '"detail"' not in response.text
+
+
+# ---- intake errors keep what the user typed ----
+
+def test_intake_with_errors_comes_back_filled_in(intake):
+    data = form(intake, name="Ana <b>Ruiz</b>", from_address="1 Main St, Los Angeles, CA", to_address="Mission, San Francisco",
+                needs=["truck", "storage"], vehicles=["suv"], from_elevator="true", flexible_days="3", home_size="2br",
+                inventory_text="sofa\nboxes x 10", notes="Piano on the 3rd floor", monthly_rent="2500.50")
+    response = TestClient(web.app).post("/plan", data=data)
+    assert response.status_code == 422
+    page = response.text
+    assert "Expected rent: enter a whole dollar amount, or leave it blank." in page
+    assert "invalid literal" not in page and "<li>form:" not in page
+    assert 'value="Ana &lt;b&gt;Ruiz&lt;/b&gt;"' in page  # kept, and escaped
+    assert 'value="1 Main St, Los Angeles, CA"' in page and 'value="Mission, San Francisco"' in page
+    assert f'value="{intake.move_date.isoformat()}"' in page and f'value="{intake.budget_usd}"' in page
+    assert '<option value="3" selected>3 days</option>' in page and '<option value="2br" selected>2br</option>' in page
+    assert 'name="needs" value="truck" checked' in page and 'name="needs" value="storage" checked' in page
+    assert 'name="needs" value="labor">' in page  # the user unchecked movers; don't tick it again
+    assert 'name="vehicles" value="suv" checked' in page and 'name="from_elevator" value="true" checked' in page
+    assert ">sofa\nboxes x 10</textarea>" in page and ">Piano on the 3rd floor</textarea>" in page
+
+
+def test_fresh_intake_form_has_the_default_services_checked():
+    page = TestClient(web.app).get("/").text
+    assert 'name="needs" value="truck" checked' in page and 'name="needs" value="labor" checked' in page
+    assert 'name="needs" value="storage">' in page and 'value="1"' in page
+
+
+def test_intake_errors_are_plain_language(intake):
+    from datetime import date, timedelta
+    data = form(intake, email="not-an-email", needs=[], move_date=(date.today() - timedelta(days=5)).isoformat())
+    response = TestClient(web.app).post("/plan", data=data)
+    assert response.status_code == 422
+    for message in ["Email: enter an address like you@example.com.", "What you need: choose at least one service.",
+                    "Move date: choose today or a later date."]:
+        assert message in response.text, message
+    assert "List should have at least 1 item" not in response.text and "@-sign" not in response.text
+
+
+def test_malformed_intake_shows_the_form_not_json(intake):
+    response = TestClient(web.app).post("/plan", data=form(intake, budget_usd="", from_floor="two", name="Ana"))
+    assert response.status_code == 422 and response.headers["content-type"].startswith("text/html")
+    assert "Total budget: enter a whole dollar amount above $0." in response.text
+    assert "Current floor: enter a whole number from 0 to 60." in response.text
+    assert '"detail"' not in response.text and 'value="Ana"' in response.text
+
+
+def test_other_validation_errors_stay_json():
+    response = TestClient(web.app).post("/chat/x")  # missing message: not the intake form
+    assert response.status_code == 422 and response.json()["detail"]
+
+
+# ---- listing check input ----
+
+@pytest.mark.parametrize("rent, bedrooms", [("$1,200", "1"), ("1200.75", "1"), (" 1200 ", " 1 ")])
+def test_listing_check_accepts_common_rent_formats(rent, bedrooms):
+    response = TestClient(web.app).post("/listing-check", data={"text": "Wire the deposit to hold it", "price_usd": rent, "bedrooms": bedrooms})
+    assert response.status_code == 200 and "High risk" in response.text
+
+
+@pytest.mark.parametrize("rent, bedrooms, message", [
+    ("cheap", "", "Rent: enter the monthly rent in dollars"),
+    ("inf", "", "Rent: enter the monthly rent in dollars"),
+    ("-5", "", "Rent: enter the monthly rent in dollars"),
+    ("", "1.5", "Bedrooms: enter a whole number, or 0 for a studio."),
+])
+def test_listing_check_explains_bad_numbers_instead_of_crashing(rent, bedrooms, message):
+    response = TestClient(web.app).post("/listing-check", data={"text": "Nice place", "price_usd": rent, "bedrooms": bedrooms})
+    assert response.status_code == 422 and message in response.text
+    assert "risk</h2>" not in response.text and ">Nice place</textarea>" in response.text
