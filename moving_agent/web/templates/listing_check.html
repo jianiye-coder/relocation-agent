@@ -9,7 +9,7 @@
   <div class="field"><label for="text">Listing text</label><textarea id="text" name="text" rows="8" required>{{ form.text or "" }}</textarea></div>
   <div class="row">
     <div class="field"><label for="price_usd">Rent ($/month)</label><input id="price_usd" name="price_usd" inputmode="decimal" autocomplete="off" placeholder="e.g. $2,450" value="{{ form.price_usd or '' }}"></div>
-    <div class="field"><label for="bedrooms">Bedrooms <span class="hint">· 0 for studio</span></label><input id="bedrooms" name="bedrooms" type="number" min="0" max="6" value="{{ form.bedrooms or '' }}"></div>
+    <div class="field"><label for="bedrooms">Bedrooms <span class="hint">· 0 for studio</span></label><input id="bedrooms" name="bedrooms" type="number" min="0" max="20" value="{{ form.bedrooms or '' }}"></div>
   </div>
   <div class="field"><label for="address">Address <span class="hint">· if the listing gives one</span></label><input id="address" name="address" value="{{ form.address or '' }}"></div>
   <div class="actions"><button class="btn btn-primary" type="submit">Check listing</button></div>

@@ -139,3 +139,16 @@ def test_plan_saved_by_an_older_deploy_counts_as_expired(redis_sessions):
     redis_sessions.data["relocation-agent:plan:old"] = "bm90IGEgcGlja2xl"  # base64 of "not a pickle"
     response = TestClient(web.app).get("/plan/old")
     assert response.status_code == 404 and "That plan is no longer available" in response.text
+
+
+def test_plan_saved_with_different_fields_counts_as_expired(intake, redis_sessions):
+    import base64
+    import pickle
+    client = TestClient(web.app)
+    rid = re.search(r"/plan/(\w+)", str(client.post("/plan", data=form(intake)).url)).group(1)
+    key = f"relocation-agent:plan:{rid}"
+    shape, session = pickle.loads(base64.b64decode(redis_sessions.data[key]))
+    older = (shape[0][:-1], *shape[1:])  # as if Session had one field fewer when it was saved
+    redis_sessions.data[key] = base64.b64encode(pickle.dumps((older, session))).decode()
+    response = client.get(f"/plan/{rid}")
+    assert response.status_code == 404 and "That plan is no longer available" in response.text

@@ -39,6 +39,22 @@ def redis_credentials() -> tuple[str, str] | None:
     return None
 
 
+def _shape(session: Any) -> tuple:
+    """Field names of the session, its deps and the intake, read from their current classes.
+
+    A plan saved by an older deploy can unpickle fine and still lack a field the new
+    code reads (AttributeError while rendering), so it is stored with its shape and
+    ignored when the shape no longer matches.
+    """
+    def names(obj: Any) -> tuple[str, ...]:
+        cls = type(obj)
+        if dataclasses.is_dataclass(cls):
+            return tuple(f.name for f in dataclasses.fields(cls))
+        return tuple(getattr(cls, "model_fields", {}))
+    deps = getattr(session, "deps", None)
+    return names(session), names(deps), names(getattr(deps, "intake", None))
+
+
 class RedisSessions:
     """Dict-like store backed by Upstash Redis over REST (no extra dependency)."""
 
@@ -57,7 +73,7 @@ class RedisSessions:
 
     def __setitem__(self, rid: str, session: Any) -> None:
         light = dataclasses.replace(session, deps=dataclasses.replace(session.deps, sources=[]))
-        blob = base64.b64encode(pickle.dumps(light)).decode()
+        blob = base64.b64encode(pickle.dumps((_shape(session), light))).decode()
         self._command("SET", KEY_PREFIX + rid, blob, "EX", str(TTL_SECONDS))
 
     def get(self, rid: str, default: Any = None) -> Any:
@@ -65,7 +81,9 @@ class RedisSessions:
         if not blob:
             return default
         try:
-            session = pickle.loads(base64.b64decode(blob))
+            shape, session = pickle.loads(base64.b64decode(blob))
+            if shape != _shape(session):
+                raise ValueError("saved with different fields")
         except Exception:  # saved by an older deploy whose classes have since changed
             log.warning("Dropping plan %s: it can't be loaded by this version of the app", rid, exc_info=True)
             return default

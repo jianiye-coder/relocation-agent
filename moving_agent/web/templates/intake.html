@@ -96,7 +96,8 @@
     </div>
     <div class="field">
       <label for="inventory_text">What you're moving <span class="hint">· rooms or items, one per line (optional, better than home size)</span></label>
-      <textarea id="inventory_text" name="inventory_text" rows="4" placeholder="2 bedrooms&#10;living room&#10;kitchen&#10;upright piano&#10;boxes x 20">{{ f.inventory_text or '' }}</textarea>
+      <textarea id="inventory_text" name="inventory_text" rows="4" placeholder="2 bedrooms&#10;living room&#10;kitchen&#10;upright piano&#10;boxes x 20">
+{{ f.inventory_text or '' }}</textarea>
     </div>
     {% if photo_inventory %}
     <div class="field">
@@ -133,7 +134,8 @@
     <h2>Selling before you move <span class="hint" style="font-size:14px;font-weight:400">· optional</span></h2>
     <div class="field">
       <label for="items_to_sell">Items to sell, one per line</label>
-      <textarea id="items_to_sell" name="items_to_sell" rows="3" placeholder="IKEA sofa&#10;Bookshelf">{{ f.items_to_sell or '' }}</textarea>
+      <textarea id="items_to_sell" name="items_to_sell" rows="3" placeholder="IKEA sofa&#10;Bookshelf">
+{{ f.items_to_sell or '' }}</textarea>
     </div>
   </section>
 
@@ -141,7 +143,8 @@
     <h2>Additional details <span class="hint" style="font-size:14px;font-weight:400">· optional</span></h2>
     <div class="field">
       <label for="notes">Anything else?</label>
-      <textarea id="notes" name="notes" rows="2">{{ f.notes or '' }}</textarea>
+      <textarea id="notes" name="notes" rows="2">
+{{ f.notes or '' }}</textarea>
     </div>
   </section>
 

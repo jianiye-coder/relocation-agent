@@ -188,6 +188,8 @@ FIELD_MESSAGES = {
 def _readable(error: dict) -> str:
     loc = [str(p) for p in error.get("loc") or () if p != "body"]  # FastAPI form errors start with "body"
     field = loc[0] if loc else ""
+    if field == "distance_miles" and error.get("type") == "less_than_equal":
+        return "Those addresses are more than 3,500 miles apart. We plan moves within the US only."
     return FIELD_MESSAGES.get(field) or f"{'.'.join(loc) or 'Form'}: {error['msg']}"
 
 
@@ -222,7 +224,8 @@ def photo_inventory_enabled() -> bool:
 
 
 def _form_context(errors: list[str], form: dict | None = None) -> dict:
-    return {"home_sizes": [h.value for h in HomeSize], "errors": errors, "today": date.today().isoformat(),
+    # The earliest pickable date is yesterday: the server runs on UTC, ahead of a US user's evening.
+    return {"home_sizes": [h.value for h in HomeSize], "errors": errors, "today": (date.today() - timedelta(days=1)).isoformat(),
             "voice_intake": voice_intake_enabled(), "photo_inventory": photo_inventory_enabled(), "form": form or {}}
 
 

@@ -303,13 +303,14 @@ def test_intake_with_errors_comes_back_filled_in(intake):
     assert 'name="needs" value="truck" checked' in page and 'name="needs" value="storage" checked' in page
     assert 'name="needs" value="labor">' in page  # the user unchecked movers; don't tick it again
     assert 'name="vehicles" value="suv" checked' in page and 'name="from_elevator" value="true" checked' in page
-    assert ">sofa\nboxes x 10</textarea>" in page and ">Piano on the 3rd floor</textarea>" in page
+    assert ">\nsofa\nboxes x 10</textarea>" in page and ">\nPiano on the 3rd floor</textarea>" in page
 
 
 def test_fresh_intake_form_has_the_default_services_checked():
     page = TestClient(web.app).get("/").text
     assert 'name="needs" value="truck" checked' in page and 'name="needs" value="labor" checked' in page
-    assert 'name="needs" value="storage">' in page and 'value="1"' in page
+    assert 'name="needs" value="storage">' in page
+    assert 'id="from_floor" name="from_floor" type="number" min="0" max="60" value="1"' in page
 
 
 def test_intake_errors_are_plain_language(intake):
@@ -354,3 +355,13 @@ def test_listing_check_explains_bad_numbers_instead_of_crashing(rent, bedrooms, 
     response = TestClient(web.app).post("/listing-check", data={"text": "Nice place", "price_usd": rent, "bedrooms": bedrooms})
     assert response.status_code == 422 and message in response.text
     assert "risk</h2>" not in response.text and ">Nice place</textarea>" in response.text
+
+
+def test_intake_says_when_a_move_is_too_long(intake):
+    response = TestClient(web.app).post("/plan", data=form(intake, distance_miles="4000"))
+    assert response.status_code == 422 and "more than 3,500 miles apart" in response.text
+
+
+def test_move_date_picker_allows_the_users_local_today():
+    from datetime import date, timedelta
+    assert f'min="{(date.today() - timedelta(days=1)).isoformat()}"' in TestClient(web.app).get("/").text
