@@ -19,7 +19,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ValidationError
 from pydantic_ai.usage import UsageLimits
 
-from .. import errands, geo, home, photo_inventory, voice_intake
+from .. import discovery, errands, geo, home, photo_inventory, voice_intake
 from ..agent import (AgentDeps, build_model, build_timeline, fill_derived, model_configured, move_day, move_errands, moving_agent,
                      pick_model, run_without_llm, trace)
 from ..models import HomeSize, Intake
@@ -359,7 +359,10 @@ async def plan(
         if geo_errors:  # the address errors already explain the missing ZIPs and distance
             errs = [e for e in errs if not e.get("loc") or e["loc"][0] not in ("from_zip", "to_zip", "distance_miles")]
         errors = geo_errors + [_readable(e) for e in errs]
-        return templates.TemplateResponse(request, "intake.html", _form_context(errors), status_code=422)
+        submitted = await request.form()
+        context = _form_context(errors)
+        context["form_values"] = {key: submitted.getlist(key) for key in submitted}
+        return templates.TemplateResponse(request, "intake.html", context, status_code=422)
 
     inventory = None
     if intake.inventory_text.strip():
@@ -524,6 +527,27 @@ def safety_checks(request: Request):
     return templates.TemplateResponse(request, "safety_checks.html", {})
 
 
+@app.get("/providers", response_class=HTMLResponse)
+def providers(request: Request, location: str = "", service: str = "movers"):
+    location = location.strip()
+    key = os.getenv("GOOGLE_PLACES_API_KEY", "").strip()
+    results = None
+    error = ""
+    if service not in discovery.SERVICES:
+        service = "movers"
+    if location and key:
+        if len(location) > 160:
+            error = "Enter a city and state or a ZIP code."
+        else:
+            results = discovery.businesses(location, service, key)
+            if results is None:
+                error = "Google Places is temporarily unavailable. Try again later."
+    return templates.TemplateResponse(request, "providers.html", {
+        "location": location, "service": service, "results": results,
+        "configured": bool(key), "error": error,
+    })
+
+
 # ---- housing search ----
 
 def _housing_filters(location: str, min_rent: str, max_rent: str, bedrooms: str, bathrooms: str) -> tuple[dict, list[str]]:
@@ -614,6 +638,7 @@ def housing(request: Request, location: str = "", zip_code: str = "", min_rent: 
         sort = "newest"
     if view not in {"list", "map"}:
         view = "list"
+    housing_source = home.housing_providers()[0]
     if searched and not errors:
         results = home.rental_listings(**filters)
         if results.get("available"):
@@ -623,6 +648,7 @@ def housing(request: Request, location: str = "", zip_code: str = "", min_rent: 
     return templates.TemplateResponse(request, "housing.html", {
         "filters": {"location": location, "min_rent": min_rent, "max_rent": max_rent, "bedrooms": bedrooms, "bathrooms": bathrooms},
         "errors": errors, "searched": searched, "results": results, "rid": rid,
+        "rentcast_enabled": housing_source.id == "rentcast", "housing_source": housing_source.name,
         "commute": commute, "sort": sort, "view": view,
         "links": _housing_links(filters, rid, commute, sort),
         "map_points": _map_points(results["listings"]) if results and results.get("available") else [],

@@ -6,6 +6,8 @@ from typing import Any, Callable, Protocol
 from zoneinfo import ZoneInfo
 import httpx
 
+from .discovery import RentCastProvider
+
 # The MVP city pair is LA -> SF; commutes are at the destination.
 DESTINATION_TZ = ZoneInfo("America/Los_Angeles")
 HOMEHARVEST_SOURCE = "HomeHarvest · Realtor.com (unofficial scrape)"
@@ -189,12 +191,20 @@ class HomeHarvestProvider:
 HOUSING_PROVIDERS: list[HousingProvider] = [HomeHarvestProvider()]
 
 
+def housing_providers() -> list[HousingProvider]:
+    """RentCast when RENTCAST_API_KEY is set (an official, paid API), otherwise the default providers."""
+    key = os.getenv("RENTCAST_API_KEY", "").strip()
+    if key:
+        return [RentCastProvider(key)]
+    return HOUSING_PROVIDERS
+
+
 def rental_listings(location: str, min_rent: int | None = None, max_rent: int | None = None,
                     bedrooms: int | None = None, bathrooms: float | None = None, limit: int = 12,
                     scraper: Callable[..., list[Any]] | None = None,
                     providers: list[HousingProvider] | None = None) -> dict:
     """Search all configured rental providers through one stable interface."""
-    configured = providers or HOUSING_PROVIDERS
+    configured = providers or housing_providers()
     if not configured:
         return _unavailable("Rental providers", "No rental listing provider is configured.") | {"listings": []}
     # Each provider may return its own unavailable state; the first available

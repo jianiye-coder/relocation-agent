@@ -44,8 +44,9 @@ The LLM is picked from whichever key is set: `FLATKEY_API_KEY` -> Claude Sonnet 
 | `moving_agent/accounts.py` | Per-user Gmail OAuth (`gmail.send` + `openid email`), encrypted refresh tokens in SQLite |
 | `moving_agent/inventory.py`, `truecost.py`, `timeline.py`, `listings.py`, `geo.py` | Deterministic inventory, all-in cost, backward move schedule, rental-risk and geocoding/distance modules |
 | `moving_agent/errands.py` | Errand roster, prepared documents (call scripts, letters, checklists) with `<placeholders>`, honest statuses, timeline linking and the arrival-pack email draft |
+| `moving_agent/home.py`, `discovery.py` | Rental search behind the `HousingProvider` contract (HomeHarvest/Realtor.com by default, RentCast when `RENTCAST_API_KEY` is set), commutes, and read-only Google Places business search (`GOOGLE_PLACES_API_KEY`) for `/providers`. RentCast and Places bill per request, so successful responses are cached in memory for 15 minutes. |
 | `moving_agent/drafts.py`, `emailer.py` | Deterministic quote/listing drafts and Gmail API, SMTP or local-outbox delivery |
-| `moving_agent/web/` | FastAPI app, session state (`store.py`: in memory locally, Upstash Redis on Vercel), access code and Jinja screens for intake, plan/chat, approval, listing check, sent view and Gmail connect callback |
+| `moving_agent/web/` | FastAPI app, session state (`store.py`: in memory locally, Upstash Redis on Vercel), access code and Jinja screens for intake, plan/chat, approval, listing check, provider search (`/providers`), sent view and Gmail connect callback |
 | `evals/` | Pydantic Evals harness: LA -> SF cases, deterministic evaluators and reports (`python -m evals.run`) |
 | `tests/` | pytest; email tests use a real local SMTP server; external APIs are faked |
 
@@ -80,6 +81,6 @@ Subclass `QuoteAdapter` in `moving_agent/adapters/`, fill `AdapterMetadata`, ret
 - Who owns what (Jenny / Sumit) is still under discussion.
 - Real Gmail send not yet run: needs a Google Cloud OAuth client (Web application) with redirect URI `http://localhost:8787/auth/google/callback` (see README).
 - The agent runs on `flatkey:claude-sonnet-5` (verified 2026-09-23: plan, what-if, chat, approval, send). A turn takes about 5-30 s; there is no loading indicator yet.
-- Provider search (Tavily / Google Places) not wired in yet; see README.
+- Google Places business search is at `/providers` (needs `GOOGLE_PLACES_API_KEY`); it lists businesses to contact and never sends anything. Tavily is not wired in yet. Keep `ACCESS_CODE` set on public deployments, since both Places and RentCast bill per request.
 - Hidden in the MVP behind `.env` flags (see PRD "Hidden in the MVP"): room photo scan (`ENABLE_PHOTO_INVENTORY`, planned to become photo → Facebook Marketplace listing) and voice intake (`ENABLE_VOICE_INTAKE`).
 - Housing listings adapter, neighborhood fit (crime, schools), utilities lookup, orchestrator + per-area agents and the browser layer are in the PRD but not in code yet.

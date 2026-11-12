@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Find moving services{% endblock %}
+{% block content %}
+<h1>Find moving services</h1>
+<p class="lead">Find nearby businesses and contact them for pricing, availability and service areas.</p>
+{% if not configured %}
+<p class="notice" role="status">Business search is unavailable on this deployment.</p>
+{% else %}
+<form method="get" action="/providers" data-busy="Searching Google Places…">
+  <div class="row">
+    <div class="field"><label for="location">City and state or ZIP</label><input id="location" name="location" value="{{ location }}" maxlength="160" required></div>
+    <div class="field"><label for="service">Service</label><select id="service" name="service">
+      <option value="movers" {% if service == 'movers' %}selected{% endif %}>Moving companies</option>
+      <option value="storage" {% if service == 'storage' %}selected{% endif %}>Storage</option>
+      <option value="truck" {% if service == 'truck' %}selected{% endif %}>Truck rental</option>
+    </select></div>
+  </div>
+  <div class="actions"><button class="btn btn-primary" type="submit">Find businesses</button></div>
+</form>
+{% endif %}
+{% if error %}<p class="errors" role="alert">{{ error }}</p>{% endif %}
+{% if results is not none %}
+<section class="block">
+  <h2>Google Maps results</h2>
+  {% for place in results %}
+  <article class="card">
+    <h3>{{ place.displayName.text if place.displayName else "Business" }}</h3>
+    <p>{{ place.formattedAddress }}</p>
+    {% if place.googleMapsUri and place.googleMapsUri.startswith("https://") %}
+    <a class="btn btn-secondary" href="{{ place.googleMapsUri }}" target="_blank" rel="noopener noreferrer">View on Google Maps</a>
+    {% endif %}
+  </article>
+  {% else %}<p>No businesses found. Try a nearby city or another service.</p>{% endfor %}
+</section>
+{% endif %}
+{% endblock %}

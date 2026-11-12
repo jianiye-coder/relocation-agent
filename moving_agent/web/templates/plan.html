@@ -17,7 +17,7 @@
   <div class="agent-fab-panel">
     <h2>Ask the agent</h2>
     <p class="muted">Tell me what to change. I’ll update this plan when I can.</p>
-    <form method="post" action="/chat/{{ rid }}" class="chat" data-busy="Working...">
+    <form method="post" action="/chat/{{ rid }}" class="chat" data-busy="Working on it… This can take up to 30 seconds.">
       <label for="floating-message" class="sr-only">Message</label>
       <input id="floating-message" name="message" placeholder="e.g. Make it cheaper" required>
       <button class="btn btn-primary" type="submit">Send</button>
@@ -56,6 +56,7 @@
 </section>
 {% else %}
 {% if view == "home" %}
+<p class="muted">Want to ask local businesses directly? <a href="/providers?location={{ intake.to_zip|urlencode }}">Find moving companies and storage near {{ intake.to_zip }}</a>.</p>
 {% if options %}
 <section class="options" aria-labelledby="options-h">
   <h2 id="options-h">Your options for moving services</h2>

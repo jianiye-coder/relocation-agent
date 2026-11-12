@@ -25,7 +25,7 @@ def test_intake_uses_a_destination_area_instead_of_asking_for_a_to_zip():
     assert '<label for="to_address">Moving to</label>' in page
     assert "City, neighborhood, or area" in page
     assert "Start broad" not in page
-    assert '<input id="to_zip" name="to_zip" type="hidden">' in page
+    assert '<input id="to_zip" name="to_zip" type="hidden" value="">' in page
     assert '<label for="to_zip">' not in page
 
 

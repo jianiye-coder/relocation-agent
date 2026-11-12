@@ -12,6 +12,7 @@ The app combines a conversational agent with deterministic planning code. Prices
 | `moving_agent/agent.py` | Agent orchestration, tool calls, alternatives, summaries and the deterministic no-LLM fallback. |
 | `moving_agent/adapters/` | Shared provider contracts plus quote, housing-adjacent service, vehicle, storage, truck, container and FMCSA adapters. |
 | `moving_agent/home.py` | Rental search provider interface, HomeHarvest/Realtor.com listings, photos, commute and explicit unavailable states. |
+| `moving_agent/discovery.py` | Optional live sources: RentCast rentals (`RENTCAST_API_KEY`) and Google Places business search for `/providers` (`GOOGLE_PLACES_API_KEY`), cached for 15 minutes. |
 | `moving_agent/planner.py` and `providers/` | Explainable offer combinations, sample catalog rates and budget-aware plan selection. |
 | `moving_agent/inventory.py`, `truecost.py`, `timeline.py` | Deterministic volume/weight estimates, move-in cost calculations and backward scheduling. |
 | `moving_agent/listings.py` and `mover`/`listing` checks | Scam-signal checks for rental listings and FMCSA registration checks for movers. |

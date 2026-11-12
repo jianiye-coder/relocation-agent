@@ -323,7 +323,10 @@
     .tl { --date-w: 44px; --node-col: 24px; }
     .tl-day { font-size: 18px; }
     .row { grid-template-columns: 1fr; gap: 0; }
-    .top-nav { height: 64px; padding: 0 16px; }
+    .top-nav { min-height: 64px; height: auto; padding: 12px 16px; flex-wrap: wrap; }
+    .top-links { width: 100%; gap: 16px; flex-wrap: wrap; }
+    .top-links a { display: inline-flex; align-items: center; min-height: 44px; }
+    .wordmark { min-height: 44px; }
     main { padding-top: 24px; }
     .actions .btn { width: 100%; }
     .card { padding: 16px; }
@@ -349,13 +352,31 @@
 </header>
 <main>{% block content %}{% endblock %}</main>
 <script>
-  // Agent turns take 5-30 seconds: show that something is happening and prevent double submits.
-  document.addEventListener("submit", (e) => {
-    const form = e.target, msg = form.dataset.busy;
-    if (!msg) return;
-    form.querySelectorAll("button").forEach((b) => (b.disabled = true));
-    const btn = e.submitter || form.querySelector("button[type=submit]");
-    if (btn) btn.textContent = msg;
+  // Keep native form navigation, with accessible feedback and back-button recovery.
+  // Each form's data-busy text says what is happening and, for agent turns, how long it takes.
+  const pendingForms = new Map();
+  document.addEventListener("submit", (event) => {
+    const form = event.target;
+    if (!form.dataset.busy || event.defaultPrevented) return;
+    if (pendingForms.has(form)) { event.preventDefault(); return; }
+    const buttons = Array.from(form.querySelectorAll("button"));
+    const previous = buttons.map(button => [button, button.disabled]);
+    const status = document.createElement("p");
+    status.className = "muted";
+    status.setAttribute("role", "status");
+    status.textContent = form.dataset.busy;
+    form.append(status);
+    form.setAttribute("aria-busy", "true");
+    buttons.forEach(button => { button.disabled = true; });
+    pendingForms.set(form, {previous, status});
+  });
+  window.addEventListener("pageshow", () => {
+    pendingForms.forEach(({previous, status}, form) => {
+      previous.forEach(([button, disabled]) => { button.disabled = disabled; });
+      status.remove();
+      form.removeAttribute("aria-busy");
+    });
+    pendingForms.clear();
   });
 </script>
 </body>

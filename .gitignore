@@ -9,3 +9,4 @@ data/accounts.db
 data/cache.db
 evals/reports/*.json
 *.egg-info/
+.DS_Store
