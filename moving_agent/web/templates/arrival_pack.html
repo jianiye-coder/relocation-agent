@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Email your moving documents{% endblock %}
+{% block content %}
+<h1>Your moving documents</h1>
+<p class="lead">One email with a call script, letter or checklist for each errand. It goes only to you. Nothing is sent until you click the button, and nothing is sent to a landlord, utility or anyone else.</p>
+
+{% if sent %}
+  {% if sent.ok %}
+  <p class="success">{% if sent.mode == "outbox" %}Saved to the outbox (demo mode, not delivered) at {{ sent.at }}.{% else %}Sent to {{ sent.to }} at {{ sent.at }}.{% endif %}</p>
+  {% else %}
+  <div class="errors">The email didn't go out: {{ sent.detail }}. Your documents are still on the timeline, and you can download them below.</div>
+  {% endif %}
+{% elif mode == "outbox" %}
+  <p class="notice">Demo mode: the email is saved as a file on the server instead of being delivered.</p>
+{% endif %}
+
+<div class="card">
+  <p class="muted">To</p><p><strong>{{ draft.to }}</strong></p>
+  <p class="muted">Subject</p><p><strong>{{ draft.subject }}</strong></p>
+  {% if not errands %}<p>Every errand is marked done, so there's nothing left to send.</p>{% endif %}
+  <details{% if errands|length <= 3 %} open{% endif %}><summary class="muted">Full email ({{ errands|length }} document{{ "s" if errands|length != 1 }})</summary><pre>{{ draft.body }}</pre></details>
+</div>
+
+<div class="actions">
+  {% if errands and not (sent and sent.ok) %}
+  <form method="post" action="/plan/{{ rid }}/arrival-pack"><button class="btn btn-primary">Email it to me</button></form>
+  {% endif %}
+  <a class="btn btn-secondary" href="/plan/{{ rid }}/arrival-pack.txt">Download as text</a>
+  <a class="btn btn-secondary" href="/plan/{{ rid }}/timeline">Back to the timeline</a>
+</div>
+{% endblock %}

@@ -12,7 +12,10 @@ Help a user relocating from Los Angeles to San Francisco compare a moving plan a
 4. Candidate decision data: source commute data where configured; show honest school/internet/electricity availability, with no guessed providers. Actual GreatSchools/FCC/NREL adapters are deferred until their contracts and access are verified.
 5. Quality: credential-free fixtures and CI, six deterministic eval cases, readable configuration and module documentation.
 
-Email drafting, approval and delivery are removed from the MVP UI and agent. Preserve underlying delivery modules for a future reviewed feature. Booking, payments, crime scoring, automated scraping and utilities activation are outside scope.
+6. Errands: the timeline carries a prepared document for each errand around the move (landlord notice, utilities start/stop, internet, USPS forwarding, DMV and car insurance when there's a vehicle, vet records when there are pets, school enrollment when children move, memberships, prescriptions and records, banks, who to tell, furniture, first 48 hours, commute). Documents are built in code from the intake (`moving_agent/errands.py`); unknown details show as `<placeholders>`. Each errand is `needs_user_action` (names the missing intake fields), `prepared_for_user`, or `done` (only when the user marks it). Nothing is ever contacted, filed or submitted for the user. Roster and status model adapted from [relocate-ai](https://github.com/vnmoorthy/relocate-ai) (MIT).
+7. Arrival pack: one email with every open errand's document, sent only to the intake email address after the user previews it and clicks "Email it to me". Sent once per plan; failures are shown, not hidden. Delivery uses the server sender (`EMAIL_MODE`: outbox by default, smtp or gmail) and `EMAIL_REDIRECT_TO` for test deployments. Also downloadable as text.
+
+Quote-request email drafting, approval and delivery to businesses stay removed from the MVP UI and agent; the arrival pack is the only email, and it goes only to the user. Preserve the delivery modules for a future reviewed feature. Booking, payments, crime scoring, automated scraping and utilities activation are outside scope.
 
 ## User flow
 

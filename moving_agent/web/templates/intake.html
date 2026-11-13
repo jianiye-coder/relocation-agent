@@ -1,6 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Plan your move{% endblock %}
 {% block content %}
+{% set values = form_values | default({}) %}
+{% macro value(name, fallback='') %}{{ values.get(name, [fallback])[0] }}{% endmacro %}
+{# First visit: use the default. After an error: checked only if it was submitted (unchecked boxes are absent). #}
+{% macro checked(name, option, default=false) %}{% if ((option in values.get(name, [])) if form_values is defined else default) %}checked{% endif %}{% endmacro %}
 <h1>Plan your move</h1>
 <p class="lead">Tell us about your move. We'll compare truck, movers and storage options that fit your dates and budget.</p>
 
@@ -18,15 +22,15 @@
 <div class="notice" role="status">{{ notice }}</div>
 {% endif %}
 {% if errors %}
-<div class="errors" role="alert"><strong>Please fix:</strong><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>
+<div class="errors" role="alert" tabindex="-1" id="intake-errors"><strong>Please fix:</strong><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>
 {% endif %}
 
-<form method="post" action="/plan" data-busy="The agent is planning your move (about 30 seconds)...">
+<form method="post" action="/plan" data-busy="Comparing your move options… This takes about 30 seconds. Please keep this page open.">
   <section class="block">
     <h2>About you</h2>
     <div class="row">
-      <div class="field"><label for="name">Name</label><input id="name" name="name" autocomplete="name" required></div>
-      <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required></div>
+      <div class="field"><label for="name">Name</label><input id="name" name="name" autocomplete="name" required value="{{ value('name', '') }}"></div>
+      <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required value="{{ value('email', '') }}"></div>
     </div>
   </section>
 
@@ -34,24 +38,24 @@
     <h2>Where and when</h2>
     <div class="field">
       <label for="from_address">Moving from</label>
-      <input id="from_address" name="from_address" autocomplete="street-address" placeholder="Street, city, state" data-geo="from" required>
+      <input id="from_address" name="from_address" autocomplete="street-address" placeholder="Street, city, state" data-geo="from" required value="{{ value('from_address', '') }}">
       <p class="muted geo-note" id="from_note" aria-live="polite"></p>
     </div>
     <div class="field">
       <label for="to_address">Moving to</label>
-      <input id="to_address" name="to_address" autocomplete="address-level2" placeholder="City, neighborhood, or area" data-geo="to" required aria-describedby="to_note">
+      <input id="to_address" name="to_address" autocomplete="address-level2" placeholder="City, neighborhood, or area" data-geo="to" required aria-describedby="to_note" value="{{ value('to_address', '') }}">
       <p class="muted geo-note" id="to_note" aria-live="polite"></p>
       <p class="muted geo-note" id="distance_note" aria-live="polite"></p>
     </div>
     {# ZIPs and driving distance come from the two addresses: the browser fills these, and the server fills them if it couldn't. #}
-    <input id="from_zip" name="from_zip" type="hidden">
-    <input id="to_zip" name="to_zip" type="hidden">
-    <input id="distance_miles" name="distance_miles" type="hidden">
-    <div class="field"><label for="move_date">Move date</label><input id="move_date" name="move_date" type="date" min="{{ today }}" required></div>
+    <input id="from_zip" name="from_zip" type="hidden" value="{{ value('from_zip', '') }}">
+    <input id="to_zip" name="to_zip" type="hidden" value="{{ value('to_zip', '') }}">
+    <input id="distance_miles" name="distance_miles" type="hidden" value="{{ value('distance_miles', '') }}">
+    <div class="field"><label for="move_date">Move date</label><input id="move_date" name="move_date" type="date" min="{{ today }}" required value="{{ value('move_date', '') }}"></div>
     <div class="field">
       <label for="flexible_days">How flexible is the date? <span class="hint">· days earlier or later</span></label>
       <select id="flexible_days" name="flexible_days">
-        <option value="0">Not flexible</option><option value="1">1 day</option><option value="3">3 days</option><option value="7">1 week</option>
+        <option value="0" {% if value('flexible_days', '0') == '0' %}selected{% endif %}>Not flexible</option><option value="1" {% if value('flexible_days', '0') == '1' %}selected{% endif %}>1 day</option><option value="3" {% if value('flexible_days', '0') == '3' %}selected{% endif %}>3 days</option><option value="7" {% if value('flexible_days', '0') == '7' %}selected{% endif %}>1 week</option>
       </select>
     </div>
   </section>
@@ -61,39 +65,43 @@
     <div class="field">
       <label for="home_size">Home size</label>
       <select id="home_size" name="home_size">
-        {% for h in home_sizes %}<option value="{{ h }}">{{ h }}</option>{% endfor %}
+        {% for h in home_sizes %}<option value="{{ h }}" {% if value('home_size') == h %}selected{% endif %}>{{ h }}</option>{% endfor %}
       </select>
     </div>
     <div class="row">
-      <div class="field"><label for="from_floor">Current floor</label><input id="from_floor" name="from_floor" type="number" min="0" value="1"></div>
-      <div class="field"><label for="to_floor">New floor <span class="hint">· optional</span></label><input id="to_floor" name="to_floor" type="number" min="0" value="1"></div>
+      <div class="field"><label for="from_floor">Current floor</label><input id="from_floor" name="from_floor" type="number" min="0" value="{{ value('from_floor', '1') }}"></div>
+      <div class="field"><label for="to_floor">New floor <span class="hint">· optional</span></label><input id="to_floor" name="to_floor" type="number" min="0" value="{{ value('to_floor', '1') }}"></div>
     </div>
     <div class="pills">
-      <label class="pill"><input type="checkbox" name="from_elevator" value="true"><span>Elevator at current home</span></label>
-      <label class="pill"><input type="checkbox" name="to_elevator" value="true"><span>Elevator at new home</span></label>
+      <label class="pill"><input type="checkbox" name="from_elevator" value="true" {{ checked('from_elevator', 'true') }}><span>Elevator at current home</span></label>
+      <label class="pill"><input type="checkbox" name="to_elevator" value="true" {{ checked('to_elevator', 'true') }}><span>Elevator at new home</span></label>
     </div>
   </section>
 
   <section class="block">
     <h2>Household</h2>
     <div class="row">
-      <div class="field"><label for="household_size">People moving</label><input id="household_size" name="household_size" type="number" min="1" max="12" value="1"></div>
-      <div class="field"><label for="pets">Pets <span class="hint">· comma-separated, e.g. cat, dog</span></label><input id="pets" name="pets"></div>
+      <div class="field"><label for="household_size">People moving</label><input id="household_size" name="household_size" type="number" min="1" max="12" value="{{ value('household_size', '1') }}"></div>
+      <div class="field"><label for="pets">Pets <span class="hint">· comma-separated, e.g. cat, dog</span></label><input id="pets" name="pets" value="{{ value('pets', '') }}"></div>
     </div>
     <label>Vehicles</label>
     <div class="pills" role="group" aria-label="Vehicles">
-      <label class="pill"><input type="checkbox" name="vehicles" value="car"><span>Car</span></label>
-      <label class="pill"><input type="checkbox" name="vehicles" value="suv"><span>SUV</span></label>
-      <label class="pill"><input type="checkbox" name="vehicles" value="truck"><span>Pickup truck</span></label>
-      <label class="pill"><input type="checkbox" name="vehicles" value="motorcycle"><span>Motorcycle</span></label>
+      <label class="pill"><input type="checkbox" name="vehicles" value="car" {{ checked('vehicles', 'car') }}><span>Car</span></label>
+      <label class="pill"><input type="checkbox" name="vehicles" value="suv" {{ checked('vehicles', 'suv') }}><span>SUV</span></label>
+      <label class="pill"><input type="checkbox" name="vehicles" value="truck" {{ checked('vehicles', 'truck') }}><span>Pickup truck</span></label>
+      <label class="pill"><input type="checkbox" name="vehicles" value="motorcycle" {{ checked('vehicles', 'motorcycle') }}><span>Motorcycle</span></label>
+    </div>
+    <label style="margin-top:16px">School</label>
+    <div class="pills" role="group" aria-label="School">
+      <label class="pill"><input type="checkbox" name="has_children" value="true" {{ checked('has_children', 'true') }}><span>School-age children are moving too</span></label>
     </div>
     <div class="row" style="margin-top:16px">
-      <div class="field"><label for="lease_end">Current lease ends <span class="hint">· optional</span></label><input id="lease_end" name="lease_end" type="date"></div>
-      <div class="field"><label for="monthly_rent">Expected rent at the new place ($/month)</label><input id="monthly_rent" name="monthly_rent" type="number" min="0"></div>
+      <div class="field"><label for="lease_end">Current lease ends <span class="hint">· optional</span></label><input id="lease_end" name="lease_end" type="date" value="{{ value('lease_end', '') }}"></div>
+      <div class="field"><label for="monthly_rent">Expected rent at the new place ($/month)</label><input id="monthly_rent" name="monthly_rent" type="number" min="0" value="{{ value('monthly_rent', '') }}"></div>
     </div>
     <div class="field">
       <label for="inventory_text">What you're moving <span class="hint">· rooms or items, one per line (optional, better than home size)</span></label>
-      <textarea id="inventory_text" name="inventory_text" rows="4" placeholder="2 bedrooms&#10;living room&#10;kitchen&#10;upright piano&#10;boxes x 20"></textarea>
+      <textarea id="inventory_text" name="inventory_text" rows="4" placeholder="2 bedrooms&#10;living room&#10;kitchen&#10;upright piano&#10;boxes x 20">{{ value('inventory_text') }}</textarea>
     </div>
     {% if photo_inventory %}
     <div class="field">
@@ -114,15 +122,15 @@
   <section class="block">
     <h2>What you need</h2>
     <div class="pills" role="group" aria-label="Services">
-      <label class="pill service-pill"><input type="checkbox" name="needs" value="truck" checked><span>Moving truck<small>I’ll drive and load it</small></span></label>
-      <label class="pill service-pill"><input type="checkbox" name="needs" value="labor" checked><span>Movers<small>Someone else handles the heavy lifting</small></span></label>
-      <label class="pill service-pill"><input type="checkbox" name="needs" value="storage"><span>Storage<small>I need a place to keep things</small></span></label>
-      <label class="pill service-pill"><input type="checkbox" name="needs" value="container"><span>Container<small>I’ll load it; the provider transports it</small></span></label>
+      <label class="pill service-pill"><input type="checkbox" name="needs" value="truck" {{ checked('needs', 'truck', true) }}><span>Moving truck<small>I’ll drive and load it</small></span></label>
+      <label class="pill service-pill"><input type="checkbox" name="needs" value="labor" {{ checked('needs', 'labor', true) }}><span>Movers<small>Someone else handles the heavy lifting</small></span></label>
+      <label class="pill service-pill"><input type="checkbox" name="needs" value="storage" {{ checked('needs', 'storage') }}><span>Storage<small>I need a place to keep things</small></span></label>
+      <label class="pill service-pill"><input type="checkbox" name="needs" value="container" {{ checked('needs', 'container') }}><span>Container<small>I’ll load it; the provider transports it</small></span></label>
     </div>
     <p class="muted" style="margin:12px 0 0">We compare U-Haul, Budget and Penske trucks; TaskRabbit and HireAHelper movers; Extra Space, Public Storage and CubeSmart storage; PODS and U-Pack containers.</p>
     <div class="row" style="margin-top:16px">
-      <div class="field"><label for="storage_months">Storage months <span class="hint">· if you need storage</span></label><input id="storage_months" name="storage_months" type="number" min="0" max="24" value="0"></div>
-      <div class="field"><label for="budget_usd">Total budget ($)</label><input id="budget_usd" name="budget_usd" type="number" min="1" required></div>
+      <div class="field"><label for="storage_months">Storage months <span class="hint">· if you need storage</span></label><input id="storage_months" name="storage_months" type="number" min="0" max="24" value="{{ value('storage_months', '0') }}"></div>
+      <div class="field"><label for="budget_usd">Total budget ($)</label><input id="budget_usd" name="budget_usd" type="number" min="1" required value="{{ value('budget_usd', '') }}"></div>
     </div>
   </section>
 
@@ -130,7 +138,7 @@
     <h2>Selling before you move <span class="hint" style="font-size:14px;font-weight:400">· optional</span></h2>
     <div class="field">
       <label for="items_to_sell">Items to sell, one per line</label>
-      <textarea id="items_to_sell" name="items_to_sell" rows="3" placeholder="IKEA sofa&#10;Bookshelf"></textarea>
+      <textarea id="items_to_sell" name="items_to_sell" rows="3" placeholder="IKEA sofa&#10;Bookshelf">{{ value('items_to_sell') }}</textarea>
     </div>
   </section>
 
@@ -138,10 +146,11 @@
     <h2>Additional details <span class="hint" style="font-size:14px;font-weight:400">· optional</span></h2>
     <div class="field">
       <label for="notes">Anything else?</label>
-      <textarea id="notes" name="notes" rows="2"></textarea>
+      <textarea id="notes" name="notes" rows="2">{{ value('notes') }}</textarea>
     </div>
   </section>
 
+  <p class="muted">Prices are estimates with sources shown in your plan. Nothing is booked or sent to a business.</p>
   <div class="actions"><button class="btn btn-primary" type="submit">Find my options</button></div>
 </form>
 
@@ -226,16 +235,29 @@
 (function () {
   const $ = (id) => document.getElementById(id);
   const place = { from: null, to: null };
+  const revision = { from: 0, to: 0 };
+  let distanceRevision = 0;
+  function invalidate(side) {
+    revision[side] += 1;
+    distanceRevision += 1;
+    place[side] = null;
+    $(side + "_zip").value = "";
+    $("distance_miles").value = "";
+    $(side + "_note").textContent = "";
+    $("distance_note").textContent = "";
+  }
 
   async function lookup(side) {
     const input = $(side + "_address"), note = $(side + "_note");
     const address = input.value.trim();
-    place[side] = null;
+    invalidate(side);
+    const current = revision[side];
     if (!address) { note.textContent = ""; return; }
     note.textContent = "Looking up address...";
     try {
       const r = await fetch("/api/geo/place?address=" + encodeURIComponent(address));
       const data = await r.json();
+      if (current !== revision[side]) return;
       if (!r.ok) {
         note.textContent = side === "to"
           ? "We couldn't resolve this area yet. Try a city name, city and state, or ZIP."
@@ -246,6 +268,7 @@
       $(side + "_zip").value = data.zip;
       note.textContent = "Found: " + data.matched_address;
     } catch (e) {
+      if (current !== revision[side]) return;
       note.textContent = side === "to"
         ? "Destination lookup is unavailable. Try again, or add the city and state."
         : "Address lookup is unavailable right now. We'll try again when you submit.";
@@ -254,6 +277,7 @@
   }
 
   async function distance() {
+    const current = ++distanceRevision;
     const note = $("distance_note");
     $("distance_miles").value = "";
     note.textContent = "Calculating driving distance...";
@@ -261,15 +285,21 @@
       const q = "from_address=" + encodeURIComponent($("from_address").value) + "&to_address=" + encodeURIComponent($("to_address").value);
       const r = await fetch("/api/geo/distance?" + q);
       const data = await r.json();
+      if (current !== distanceRevision) return;
       if (!r.ok) { note.textContent = data.error; return; }
       $("distance_miles").value = data.distance_miles;
       note.textContent = "About " + data.distance_miles + " miles by road (" + data.distance_source + ")";
     } catch (e) {
+      if (current !== distanceRevision) return;
       note.textContent = "Couldn't calculate the distance yet. We'll try again when you submit.";
     }
   }
 
-  document.querySelectorAll("[data-geo]").forEach((el) => el.addEventListener("change", () => lookup(el.dataset.geo)));
+  document.querySelectorAll("[data-geo]").forEach((el) => {
+    el.addEventListener("input", () => invalidate(el.dataset.geo));
+    el.addEventListener("change", () => lookup(el.dataset.geo));
+  });
+  document.getElementById("intake-errors")?.focus();
 })();
 </script>
 {% if photo_inventory %}

@@ -14,14 +14,16 @@ from urllib.parse import urlencode
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ValidationError
 from pydantic_ai.usage import UsageLimits
 
-from .. import geo, home, photo_inventory, voice_intake
-from ..agent import AgentDeps, build_model, fill_derived, model_configured, moving_agent, pick_model, run_without_llm, trace
+from .. import discovery, errands, geo, home, photo_inventory, voice_intake
+from ..agent import (AgentDeps, build_model, build_timeline, fill_derived, model_configured, move_day, move_errands, moving_agent,
+                     pick_model, run_without_llm, trace)
 from ..models import HomeSize, Intake
+from ..emailer import sender_from_env
 from ..adapters import AdapterError, ErrorCode, FMCSAAdapter, QuoteCache, RegistrySource, default_registry
 from ..inventory import estimate as estimate_inventory
 from ..listings import check as check_listing_rules
@@ -331,6 +333,7 @@ async def plan(
     household_size: int = Form(1),
     pets: str = Form(""),
     vehicles: list[str] = Form(default=[]),
+    has_children: bool = Form(False),
     lease_end: str = Form(""),
     monthly_rent: str = Form(""),
 ):
@@ -348,7 +351,7 @@ async def plan(
             needs=needs, storage_months=storage_months, budget_usd=budget_usd,
             items_to_sell=[i for i in items_to_sell.splitlines() if i.strip()], notes=notes,
             inventory_text=inventory_text, household_size=household_size,
-            pets=[p.strip() for p in pets.split(",") if p.strip()], vehicles=vehicles,
+            pets=[p.strip() for p in pets.split(",") if p.strip()], vehicles=vehicles, has_children=has_children,
             lease_end=lease_end or None, monthly_rent=int(monthly_rent) if monthly_rent.strip() else None,
         )
     except (ValidationError, ValueError) as exc:
@@ -356,7 +359,10 @@ async def plan(
         if geo_errors:  # the address errors already explain the missing ZIPs and distance
             errs = [e for e in errs if not e.get("loc") or e["loc"][0] not in ("from_zip", "to_zip", "distance_miles")]
         errors = geo_errors + [_readable(e) for e in errs]
-        return templates.TemplateResponse(request, "intake.html", _form_context(errors), status_code=422)
+        submitted = await request.form()
+        context = _form_context(errors)
+        context["form_values"] = {key: submitted.getlist(key) for key in submitted}
+        return templates.TemplateResponse(request, "intake.html", context, status_code=422)
 
     inventory = None
     if intake.inventory_text.strip():
@@ -401,6 +407,70 @@ def _session(rid: str, request: Request) -> Session:
     return s
 
 
+# ---- errands and the arrival pack ----
+# Declared before /plan/{rid}/{view} so that catch-all doesn't swallow these paths.
+# Errand documents are built by errands.py from the intake. The only email this app sends is the
+# arrival pack, to the address the user typed on the intake form, after they preview it and click send.
+
+def _errand_or_404(eid: str) -> None:
+    if eid not in errands.SPEC_BY_ID:
+        raise HTTPException(404, "Errand not found.")
+
+
+@app.post("/plan/{rid}/errands/{eid}")
+def mark_errand(request: Request, rid: str, eid: str, done: str = Form("1")):
+    _errand_or_404(eid)
+    d = _session(rid, request).deps
+    marked = set(d.errands_done)
+    marked.add(eid) if done == "1" else marked.discard(eid)
+    d.errands_done = tuple(sorted(marked))
+    build_timeline(d)
+    return RedirectResponse(f"/plan/{rid}/timeline#errand-{eid}", status_code=303)
+
+
+def _arrival_draft(rid: str, d: AgentDeps):
+    draft = errands.arrival_pack(d.intake, move_errands(d), move_day(d))
+    draft = draft.model_copy(update={"offer_id": f"arrival-pack-{rid}"})
+    redirect = os.getenv("EMAIL_REDIRECT_TO", "").strip()
+    if redirect:  # test deployments: deliver to the operator, and say who it was for
+        draft = draft.model_copy(update={"to": redirect, "body": f"[Redirected test email, meant for {draft.to}]\n\n{draft.body}"})
+    return draft
+
+
+@app.get("/plan/{rid}/arrival-pack", response_class=HTMLResponse)
+def arrival_pack_preview(request: Request, rid: str):
+    """The exact email, before anything is sent."""
+    d = _session(rid, request).deps
+    return templates.TemplateResponse(request, "arrival_pack.html", {
+        "rid": rid, "draft": _arrival_draft(rid, d), "sent": d.arrival_pack, "mode": os.getenv("EMAIL_MODE", "outbox"),
+        "errands": [e for e in move_errands(d) if e.status != "done"],
+    })
+
+
+@app.get("/plan/{rid}/arrival-pack.txt")
+def arrival_pack_download(request: Request, rid: str):
+    d = _session(rid, request).deps
+    draft = errands.arrival_pack(d.intake, move_errands(d), move_day(d))
+    return PlainTextResponse(f"Subject: {draft.subject}\n\n{draft.body}\n",
+                             headers={"Content-Disposition": 'attachment; filename="moving-documents.txt"'})
+
+
+@app.post("/plan/{rid}/arrival-pack", response_class=HTMLResponse)
+def arrival_pack_send(request: Request, rid: str):
+    d = _session(rid, request).deps
+    if d.arrival_pack and d.arrival_pack["ok"]:  # already delivered: a refresh or double click doesn't send twice
+        return RedirectResponse(f"/plan/{rid}/arrival-pack", status_code=303)
+    draft = _arrival_draft(rid, d)
+    mode = os.getenv("EMAIL_MODE", "outbox")
+    try:
+        sender = sender_from_env()
+        result = sender.send(draft, sender=os.getenv("EMAIL_FROM") or os.getenv("SMTP_USERNAME") or draft.to)
+        d.arrival_pack = errands.sent_record(result.ok, result.to, result.detail, mode)
+    except Exception as exc:  # missing settings or a provider error: show it, don't pretend it went out
+        d.arrival_pack = errands.sent_record(False, draft.to, f"{type(exc).__name__}: {str(exc)[:200]}", mode)
+    return RedirectResponse(f"/plan/{rid}/arrival-pack", status_code=303)
+
+
 @app.get("/plan/{rid}", response_class=HTMLResponse)
 def show_plan(request: Request, rid: str):
     return _render_plan(request, rid, "overview")
@@ -424,7 +494,8 @@ def _render_plan(request: Request, rid: str, view: str):
     return templates.TemplateResponse(request, "plan.html", {
         "rid": rid, "view": view, "s": s, "intake": d.intake, "plans": plans, "listings": d.listings,
         "options": options, "price_notes": price_notes(options),
-        "tl": timeline_view(d.timeline, move_day) if d.timeline else None,
+        "tl": timeline_view(d.timeline, move_day, errands=move_errands(d)) if d.timeline else None,
+        "arrival_pack": d.arrival_pack,
         "steps": trace(s.history),
         "model": pick_model(), "inventory": d.inventory, "vehicle_options": d.vehicle_options,
         "true_cost": d.true_cost, "timeline": d.timeline, "listing_checks": d.listing_checks,
@@ -454,6 +525,27 @@ def listing_check_form(request: Request):
 def safety_checks(request: Request):
     """Safety tools for listings the user has already found elsewhere."""
     return templates.TemplateResponse(request, "safety_checks.html", {})
+
+
+@app.get("/providers", response_class=HTMLResponse)
+def providers(request: Request, location: str = "", service: str = "movers"):
+    location = location.strip()
+    key = os.getenv("GOOGLE_PLACES_API_KEY", "").strip()
+    results = None
+    error = ""
+    if service not in discovery.SERVICES:
+        service = "movers"
+    if location and key:
+        if len(location) > 160:
+            error = "Enter a city and state or a ZIP code."
+        else:
+            results = discovery.businesses(location, service, key)
+            if results is None:
+                error = "Google Places is temporarily unavailable. Try again later."
+    return templates.TemplateResponse(request, "providers.html", {
+        "location": location, "service": service, "results": results,
+        "configured": bool(key), "error": error,
+    })
 
 
 # ---- housing search ----
@@ -546,6 +638,7 @@ def housing(request: Request, location: str = "", zip_code: str = "", min_rent: 
         sort = "newest"
     if view not in {"list", "map"}:
         view = "list"
+    housing_source = home.housing_providers()[0]
     if searched and not errors:
         results = home.rental_listings(**filters)
         if results.get("available"):
@@ -555,6 +648,7 @@ def housing(request: Request, location: str = "", zip_code: str = "", min_rent: 
     return templates.TemplateResponse(request, "housing.html", {
         "filters": {"location": location, "min_rent": min_rent, "max_rent": max_rent, "bedrooms": bedrooms, "bathrooms": bathrooms},
         "errors": errors, "searched": searched, "results": results, "rid": rid,
+        "rentcast_enabled": housing_source.id == "rentcast", "housing_source": housing_source.name,
         "commute": commute, "sort": sort, "view": view,
         "links": _housing_links(filters, rid, commute, sort),
         "map_points": _map_points(results["listings"]) if results and results.get("available") else [],

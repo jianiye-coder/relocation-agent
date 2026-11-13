@@ -53,13 +53,14 @@ def test_departure_time_is_sent_to_google_routes(monkeypatch):
     from datetime import date
     from moving_agent.home import departure_time
     monkeypatch.setenv("GOOGLE_MAPS_API_KEY", "test-key")
-    leave = departure_time(date(2026, 10, 14), "08:30")
-    assert leave.isoformat() == "2026-10-14T08:30:00-07:00"  # San Francisco, daylight time
+    year = date.today().year + 1  # departure_time drops past times; 14 Oct is always daylight time
+    leave = departure_time(date(year, 10, 14), "08:30")
+    assert leave.isoformat() == f"{year}-10-14T08:30:00-07:00"  # San Francisco, daylight time
     captured = {}
     result = commute("1 Main St", "1 Market St", "transit", client=_capture_client(captured), departure=leave)
-    assert captured["body"]["departureTime"] == "2026-10-14T15:30:00Z"
+    assert captured["body"]["departureTime"] == f"{year}-10-14T15:30:00Z"
     assert "routingPreference" not in captured["body"]  # only for driving
-    assert result["departure"] == "2026-10-14T08:30:00-07:00"
+    assert result["departure"] == f"{year}-10-14T08:30:00-07:00"
 
 
 def test_driving_with_departure_uses_traffic(monkeypatch):
@@ -67,7 +68,7 @@ def test_driving_with_departure_uses_traffic(monkeypatch):
     from moving_agent.home import departure_time
     monkeypatch.setenv("GOOGLE_MAPS_API_KEY", "test-key")
     captured = {}
-    commute("1 Main St", "1 Market St", "drive", client=_capture_client(captured), departure=departure_time(date(2026, 10, 14), "08:30"))
+    commute("1 Main St", "1 Market St", "drive", client=_capture_client(captured), departure=departure_time(date(date.today().year + 1, 10, 14), "08:30"))
     assert captured["body"]["routingPreference"] == "TRAFFIC_AWARE"
 
 

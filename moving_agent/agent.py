@@ -16,7 +16,7 @@ from datetime import date
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, ModelRetry, RunContext
 
-from . import drafts, listings, timeline, truecost
+from . import drafts, errands, listings, timeline, truecost
 from .adapters import AdapterError, FMCSAAdapter, ServiceType
 from .adapters.bridge import run_sync
 from .inventory import Inventory
@@ -52,6 +52,10 @@ class AgentDeps:
     listing_checks: list[dict] = field(default_factory=list)
     vetting: list[dict] = field(default_factory=list)
     home_results: list[dict] = field(default_factory=list)
+    # Errands the user marked done, and the result of sending the arrival-pack email to them.
+    # Plain defaults (not factories) so plans pickled before these fields existed still load.
+    errands_done: tuple[str, ...] = ()
+    arrival_pack: dict | None = None
 
 
 class AgentReply(BaseModel):
@@ -75,6 +79,8 @@ How to work:
 5. If the user listed items to sell, call draft_listings.
 5b. If the user has vehicles, call compare_vehicle_options. Then call estimate_true_cost and plan_timeline
    so the user sees the full cost (move + deposit + first month + utilities + vehicle) and what to do when.
+   plan_timeline also prepares a document (call script, letter or checklist) for each errand; the user
+   uses them themselves. Never say an errand was done, sent or submitted for them.
    If the user gives a mover's USDOT or MC number, call vet_mover. If they paste a rental listing, call check_listing.
 6. If no plan fits the budget or the date, explain the gap in dollars, what you tried, and the options.
 7. End with a short summary. Quote prices exactly as the tools returned them.
@@ -365,13 +371,27 @@ def estimate_true_cost(ctx: RunContext[AgentDeps]) -> dict:
 def plan_timeline(ctx: RunContext[AgentDeps]) -> list[dict]:
     """Moving to-do list planned backward from the move date (and the current lease end)."""
     d = ctx.deps
-    move_day = d.plans[d.chosen].move_date if d.plans else d.intake.move_date
-    d.timeline = timeline.build(
-        move_day, d.intake.lease_end, has_vehicle=bool(d.intake.vehicles), selling=bool(d.intake.items_to_sell),
-        needs_storage="storage" in d.intake.needs,
-        special_items=d.inventory.special_items if d.inventory else None,
-    )
-    return [{"due": t.due.isoformat(), "task": t.title, "overdue": t.overdue} for t in d.timeline]
+    build_timeline(d)
+    status = {e.id: e.status for e in move_errands(d)}
+    return [{"due": t.due.isoformat(), "task": t.title, "overdue": t.overdue,
+             **({"document": status[t.errand]} if t.errand in status else {})} for t in d.timeline]
+
+
+def move_day(deps: AgentDeps):
+    return deps.plans[deps.chosen].move_date if deps.plans else deps.intake.move_date
+
+
+def move_errands(deps: AgentDeps) -> list[errands.Errand]:
+    """Errands for this move with their prepared documents. Plain code; the model never writes them."""
+    return errands.build(deps.intake, move_day(deps), deps.errands_done)
+
+
+def build_timeline(deps: AgentDeps) -> None:
+    deps.timeline = errands.attach(timeline.build(
+        move_day(deps), deps.intake.lease_end, has_vehicle=bool(deps.intake.vehicles),
+        selling=bool(deps.intake.items_to_sell), needs_storage="storage" in deps.intake.needs,
+        special_items=deps.inventory.special_items if deps.inventory else None,
+    ), move_errands(deps))
 
 
 @moving_agent.tool
@@ -468,10 +488,7 @@ def fill_derived(deps: AgentDeps) -> None:
     plan = deps.plans[deps.chosen] if deps.plans else None
     deps.true_cost = truecost.compute(plan, deps.intake.home_size, deps.intake.monthly_rent,
                                       vehicle_cost=vcost, vehicle_basis=vbasis)
-    deps.timeline = timeline.build(plan.move_date if plan else deps.intake.move_date, deps.intake.lease_end,
-                                   has_vehicle=bool(deps.intake.vehicles), selling=bool(deps.intake.items_to_sell),
-                                   needs_storage="storage" in deps.intake.needs,
-                                   special_items=deps.inventory.special_items if deps.inventory else None)
+    build_timeline(deps)
 
 
 def run_without_llm(deps: AgentDeps) -> str:

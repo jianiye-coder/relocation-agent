@@ -24,11 +24,11 @@
   </article>
 {%- endmacro %}
 <h1>Find a home</h1>
-<p class="lead">Search active rentals with photos from Realtor.com. Results never come from our sample catalog.</p>
+<p class="lead">Search active rentals from {{ housing_source }}. Results never come from our sample catalog.</p>
 
-<form class="housing-search" method="get" action="/housing" role="search" aria-label="Search rental listings">
+<form class="housing-search" method="get" action="/housing" role="search" data-busy="Searching live listings…" aria-label="Search rental listings">
   {% if rid %}<input type="hidden" name="rid" value="{{ rid }}">{% endif %}
-  <div class="field"><label for="location">Destination area</label><input id="location" name="location" autocomplete="address-level2" required value="{{ filters.location }}" placeholder="e.g. Lakeview, Chicago or South Bay, CA"><p class="field-help">Search a city, neighborhood, larger area, or ZIP code.</p></div>
+  <div class="field"><label for="location">Destination area</label><input id="location" name="location" autocomplete="address-level2" required value="{{ filters.location }}" placeholder="{{ 'e.g. San Francisco, CA' if rentcast_enabled else 'e.g. Lakeview, Chicago or South Bay, CA' }}"><p class="field-help">{{ "Search by city and state or ZIP code." if rentcast_enabled else "Search a city, neighborhood, larger area, or ZIP code." }}</p></div>
   <div class="row">
     <div class="field"><label for="min_rent">Minimum monthly rent <span class="hint">· optional</span></label><input id="min_rent" name="min_rent" inputmode="numeric" min="0" value="{{ filters.min_rent }}" placeholder="e.g. 2200"></div>
     <div class="field"><label for="max_rent">Maximum monthly rent <span class="hint">· optional</span></label><input id="max_rent" name="max_rent" inputmode="numeric" min="0" value="{{ filters.max_rent }}" placeholder="e.g. 3200"></div>
@@ -42,7 +42,7 @@
     <div class="field"><label for="commute_mode">Commute mode</label><select id="commute_mode" name="commute_mode">{% for mode in ["drive", "transit", "walk", "bicycle"] %}<option value="{{ mode }}"{% if commute.mode == mode %} selected{% endif %}>{{ mode|capitalize }}</option>{% endfor %}</select></div>
   </fieldset>
   <input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="view" value="{{ view }}">
-  <div class="actions"><button class="btn btn-primary" type="submit" data-busy="Searching live listings…">Search live listings</button></div>
+  <div class="actions"><button class="btn btn-primary" type="submit">Search live listings</button></div>
 </form>
 
 {% if errors %}<div class="errors" role="alert"><ul>{% for error in errors %}<li>{{ error }}</li>{% endfor %}</ul></div>{% endif %}

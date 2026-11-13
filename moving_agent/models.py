@@ -53,6 +53,7 @@ class Intake(BaseModel):
     household_size: int = Field(default=1, ge=1, le=12)
     pets: list[str] = Field(default_factory=list)
     vehicles: list[Literal["car", "suv", "truck", "motorcycle"]] = Field(default_factory=list)
+    has_children: bool = Field(default=False, description="School-age children moving too")
     lease_end: date | None = None
     monthly_rent: int | None = Field(default=None, ge=0, description="Expected rent at the new place")
     candidate_addresses: list[str] = Field(default_factory=list, max_length=2)
